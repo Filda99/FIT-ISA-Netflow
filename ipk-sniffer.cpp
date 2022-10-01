@@ -26,6 +26,20 @@
  * *******************************************************************************************************************
  */
 
+
+
+/**
+ ********************************************************************************
+ * @file    ultrasonic_m5stack.c
+ * @author  user
+ * @date    Sep 26, 2022
+ * @brief   
+ ********************************************************************************
+ */
+
+/************************************
+ * INCLUDES
+ ************************************/
 #include <stdio.h>
 #include <pcap.h>
 #include <getopt.h>
@@ -44,13 +58,29 @@
 #include <netinet/ip6.h>        //ipv6 hlavicka
 //#include <math.h>               //ceil()
 
+/************************************
+ * EXTERN VARIABLES
+ ************************************/
+
+/************************************
+ * PRIVATE MACROS AND DEFINES
+ ************************************/
 #define ETH_HDR  14
 //#define IPV4_PROT   0
 //#define IPV6_PROT   1
 #define IPV6_HDR    40
 
-/***********************/
-/** Globalni promenne **/
+/************************************
+ * PRIVATE TYPEDEFS
+ ************************************/
+
+/************************************
+ * STATIC VARIABLES
+ ************************************/
+
+/************************************
+ * GLOBAL VARIABLES
+ ************************************/
 // Boolean hodnoty, ktere protokoly se maji zobrazovat
 bool tcp = false;
 bool udp = false;
@@ -66,29 +96,27 @@ char* port = (char*)"0";
 // Pocet paketu, kolik se jich ma zobrazit
 // Defaultne 1
 int numOfPackets = 1;
-/***********************/
 
-/**
- * Vypsani rozhranni, na kterych se da packety odchytavat.
- */
-void print_interface()
-{
-    // Prevzato a upraveno z: http://embeddedguruji.blogspot.com/2014/01/pcapfindalldevs-example.html
-    char error[PCAP_ERRBUF_SIZE];
-    pcap_if_t *interfaces,*temp;
-    int i=0;
-    if(pcap_findalldevs(&interfaces,error)==-1)
-    {
-        printf("[ERR]: Nenasel jsem zadna zarizeni.\n");
-    }
-    printf("Seznam veskerych rozhranni je nasledujici:\n");
-    for(temp=interfaces;temp;temp=temp->next)
-    {
-        printf("%d:  %s\n",i++,temp->name);
-    }
-    exit(1);
-}
+/************************************
+ * STATIC FUNCTION PROTOTYPES
+ ************************************/
+void parse_arguments(int argc, char **argv);
+std::string fill_filter_str(std::string str);
+std::string time_rfc3339();
+void icmp_v4(const u_char *packetWoEther,  const u_char *packet, bpf_u_int32 lengthOfPacket, std::string currentTime);
+void icmp_v6(const u_char *packetWoEther,  const u_char *packet, bpf_u_int32 lengthOfPacket, std::string currentTime);
+void udp_v4(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengthOfPacket,
+              std::string currentTime, unsigned int ipLen);
+void udp_v6(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengthOfPacket, std::string currentTime);
+void tcp_v4(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengthOfPacket,
+              std::string currentTime, unsigned int ipLen);
+void tcp_v6(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengthOfPacket, std::string currentTime);
+void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet);
 
+
+/************************************
+ * STATIC FUNCTIONS
+ ************************************/
 /**
  * Parsovani argumentu.
  * Argumenty mohou byt zadany nasledovne:
@@ -567,3 +595,8 @@ int main (int argc, char **argv)
 
     return(0);
 }
+
+
+/************************************
+ * GLOBAL FUNCTIONS
+ ************************************/
