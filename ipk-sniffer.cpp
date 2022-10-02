@@ -174,18 +174,6 @@ void parse_arguments(int argc, char **argv)
                 break;
         }
     }
-    if (!checkInterface){
-        fprintf(stderr, "[ERR]: Zadal jste spatne argumenty.\n");
-        exit(3);
-    }
-
-    if (!tcp && !udp && !arp && !icmp){
-        tcp = true;
-        udp = true;
-        arp = true;
-        icmp = true;
-    }
-    return;
 }
 
 /**
@@ -528,35 +516,45 @@ int main (int argc, char **argv)
     if (argc == 1){
         exit(1);
     }
-    // Parsovani argumentu
     parse_arguments(argc, argv);
 
-    pcap_t *handle;
+
     struct bpf_program fp;
     // Hodnota pro filtrovani
     std::string filterStr = "";    // https://bit.ly/3giiyKP
     filterStr = fill_filter_str(filterStr);
     bpf_u_int32 net;
-    // Error buffer, slouzi pro ukladani pripadnych erroru
+    
+
+    pcap_t *handle;
+    struct pcap_pkthdr header;
+    const uint8_t *packet;
     char errbuf[PCAP_ERRBUF_SIZE];
 
+
+
+
     // Otevreni zarizeni pro sledovani paketu
-    handle = pcap_open_live(device, BUFSIZ, 1, 1000, errbuf);
+    handle = pcap_open_offline(pcapFile_name.c_str(), errbuf);
     if (handle == NULL) {
         fprintf(stderr, "[ERR]: Nepodařilo se mi otevřít zařízení %s: %s\n", device, errbuf);
         return(2);
     }
-    if (pcap_compile(handle, &fp, filterStr.c_str(), 0, net) == -1) {
-        fprintf(stderr, "[ERR]: Parsování filtru se neydařilo %s: %s\n", filterStr.c_str(), pcap_geterr(handle));
-        return(2);
+    while(packet = pcap_next(handle, &header))
+    {
+        printf("Got packet!");
     }
-    if (pcap_setfilter(handle, &fp) == -1) {
-        fprintf(stderr, "[ERR]: Filtr se nepodařilo uložit do pcap %s: %s\n", filterStr.c_str(), pcap_geterr(handle));
-        return(2);
-    }
-    pcap_loop(handle, numOfPackets, process_packet, NULL);
+    // if (pcap_compile(handle, &fp, filterStr.c_str(), 0, net) == -1) {
+    //     fprintf(stderr, "[ERR]: Parsování filtru se neydařilo %s: %s\n", filterStr.c_str(), pcap_geterr(handle));
+    //     return(2);
+    // }
+    // if (pcap_setfilter(handle, &fp) == -1) {
+    //     fprintf(stderr, "[ERR]: Filtr se nepodařilo uložit do pcap %s: %s\n", filterStr.c_str(), pcap_geterr(handle));
+    //     return(2);
+    // }
+    // pcap_loop(handle, numOfPackets, process_packet, NULL);
 
-    pcap_freecode(&fp);
+    // pcap_freecode(&fp);
     pcap_close(handle);
 
     return(0);
