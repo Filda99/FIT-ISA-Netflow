@@ -98,6 +98,7 @@ char* port = (char*)"0";
 int numOfPackets = 1;
 
 FILE *pcapFile;
+std::string pcapFile_name = "";
 std::string netflow_collector_IP = "127.0.0.1";
 std::string netflow_collector_port = ":2055";
 int active_timer = 60;
@@ -140,13 +141,11 @@ void parse_arguments(int argc, char **argv)
         printf("%c\n", c);
         switch (c)
         {
-            // Pokud je zadan pouze samotny argument, napr: -i
             case 'f':
-                pcapFile = optarg;
-                printf("%s\n", pcapFile); 
+                pcapFile_name = optarg;
                 break;
 
-            case 'p':
+            case 'c':
                 if (atoi(optarg) < 0){
                     fprintf(stderr, "[ERR]: Parametru -p lze priradit pouze int.\n");
                     exit(3);
