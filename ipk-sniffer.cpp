@@ -135,7 +135,8 @@ void parse_arguments(int argc, char **argv)
 {
     bool checkInterface = false;
 
-    while((int c = getopt(argc, argv, "f:c:a:i:m:")) != -1){
+    int c;
+    while(( c = getopt(argc, argv, "f:c:a:i:m:")) != -1){
         printf("%c\n", c);
         exit(1);
         switch (c)
@@ -143,7 +144,6 @@ void parse_arguments(int argc, char **argv)
             // Pokud je zadan pouze samotny argument, napr: -i
             case ':':
                 if (optopt == 'i'){
-                    print_interface();
                 }
                 else{
                     fprintf(stderr, "[ERR]: Zadal jste spatne argumenty.\n");
@@ -273,7 +273,7 @@ void icmp_v4(const u_char *packetWoEther,  const u_char *packet, bpf_u_int32 len
     destIpAddr.append(inet_ntoa(iphdrVar->ip_dst));
     printf("\n%s %s > %s, length %d bytes\n", currentTime.c_str(), srcIpAddr.c_str(),
            destIpAddr.c_str(), lengthOfPacket);
-    print_packet_body(packet, lengthOfPacket);
+    //print_packet_body(packet, lengthOfPacket);
 }
 
 /**
@@ -294,7 +294,7 @@ void icmp_v6(const u_char *packetWoEther,  const u_char *packet, bpf_u_int32 len
     inet_ntop(AF_INET6, &(ip6hdrVar->ip6_src), srcIpAddr, INET6_ADDRSTRLEN);
     inet_ntop(AF_INET6, &(ip6hdrVar->ip6_dst), destIpAddr, INET6_ADDRSTRLEN);
     printf("\n%s %s > %s, length %d bytes\n", currentTime.c_str(), srcIpAddr, destIpAddr, lengthOfPacket);
-    print_packet_body(packet, lengthOfPacket);
+    //print_packet_body(packet, lengthOfPacket);
 }
 
 /**
@@ -327,7 +327,7 @@ void udp_v4(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengt
     uint16_t dstPort = ntohs(udphdrVar->uh_dport);
     printf("\n%s %s : %d > %s : %d, length %d bytes\n", currentTime.c_str(), srcIpAddr.c_str(), srcPort,
            destIpAddr.c_str(), dstPort, lengthOfPacket);
-    print_packet_body(packet, lengthOfPacket);
+    //print_packet_body(packet, lengthOfPacket);
 }
 
 /**
@@ -357,7 +357,7 @@ void udp_v6(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengt
     uint16_t dstPort = ntohs(udphdrVar->uh_dport);
     printf("\n%s %s : %d > %s : %d, length %d bytes\n", currentTime.c_str(), srcIpAddr, srcPort,
            destIpAddr, dstPort, lengthOfPacket);
-    print_packet_body(packet, lengthOfPacket);
+    //print_packet_body(packet, lengthOfPacket);
 }
 
 /**
@@ -390,7 +390,7 @@ void tcp_v4(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengt
     uint16_t dstPort = ntohs(tcphdrVar->th_dport);
     printf("\n%s %s : %d > %s : %d, length %d bytes\n", currentTime.c_str(), srcIpAddr.c_str(), srcPort,
            destIpAddr.c_str(), dstPort, lengthOfPacket);
-    print_packet_body(packet, lengthOfPacket);
+    //print_packet_body(packet, lengthOfPacket);
 }
 
 /**
@@ -420,7 +420,7 @@ void tcp_v6(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengt
     uint16_t dstPort = ntohs(tcphdrVar->th_dport);
     printf("\n%s %s : %d > %s : %d, length %d bytes\n", currentTime.c_str(), srcIpAddr, srcPort,
            destIpAddr, dstPort, lengthOfPacket);
-    print_packet_body(packet, lengthOfPacket);
+    //print_packet_body(packet, lengthOfPacket);
 }
 
 /**
@@ -527,14 +527,13 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
             option = "reply";
 
         printf("%s %s (%s), length %d bytes\n", currentTime.c_str(), printAddr.c_str(), option.c_str(), header->len);
-        print_packet_body(packet, header->len);
+        //print_packet_body(packet, header->len);
     }
 }
 
 int main (int argc, char **argv)
 {
     if (argc == 1){
-        print_interface();
         exit(1);
     }
     // Parsovani argumentu
