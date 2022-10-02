@@ -136,28 +136,14 @@ void parse_arguments(int argc, char **argv)
     bool checkInterface = false;
 
     int c;
-    while(( c = getopt(argc, argv, "f:c:a:i:m:")) != -1){
+    while((c = getopt(argc, argv, "f:c:a:i:m:")) != -1){
         printf("%c\n", c);
-        exit(1);
         switch (c)
         {
             // Pokud je zadan pouze samotny argument, napr: -i
-            case ':':
-                if (optopt == 'i'){
-                }
-                else{
-                    fprintf(stderr, "[ERR]: Zadal jste spatne argumenty.\n");
-                    exit(3);
-                }
-            case 'i':
-                if (optarg == NULL || (strcmp(optarg, "-p") == 0)){
-                    fprintf(stderr, "[ERR]: Zadal jste spatne argumenty.\n");
-                    exit(3);
-                }
-                else{
-                    device = optarg;
-                    checkInterface = true;
-                }
+            case 'f':
+                pcapFile = optarg;
+                printf("%s\n", pcapFile); 
                 break;
 
             case 'p':
