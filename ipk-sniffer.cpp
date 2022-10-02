@@ -97,6 +97,13 @@ char* port = (char*)"0";
 // Defaultne 1
 int numOfPackets = 1;
 
+FILE *pcapFile;
+std::string netflow_collector_IP = "127.0.0.1";
+std::string netflow_collector_port = ":2055";
+int active_timer = 60;
+int inactive_timer = 10;
+int flowcache_size = 1024;
+
 /************************************
  * STATIC FUNCTION PROTOTYPES
  ************************************/
@@ -128,21 +135,9 @@ void parse_arguments(int argc, char **argv)
 {
     bool checkInterface = false;
 
-    static struct option longOpts[] =
-        {
-                {"interface",   required_argument,  0,  'i'},
-                {"tcp",         no_argument,        0,  't'},
-                {"udp",         no_argument,        0,  'u'},
-                {"arp",         no_argument,        0,  0},
-                {"icmp",        no_argument,        0,  0},
-                {0, 0, 0, 0}  // ukoncovaci prvek
-        };
-
-    int c;          // Prave nacteny argument
-    int index = 0;  //  Index ve strukture longOpts, vyuziva se, kdyz argument nema zkratku
-    //  interface, port, num musi pozaduji zadane argumenty
-    while((c = getopt_long(argc, argv, ":i:p:tun:", longOpts, &index)) != -1){
-        //printf("%c\n", c);
+    while((int c = getopt(argc, argv, "f:c:a:i:m:")) != -1){
+        printf("%c\n", c);
+        exit(1);
         switch (c)
         {
             // Pokud je zadan pouze samotny argument, napr: -i
@@ -154,18 +149,6 @@ void parse_arguments(int argc, char **argv)
                     fprintf(stderr, "[ERR]: Zadal jste spatne argumenty.\n");
                     exit(3);
                 }
-            case 0:
-                if (longOpts[index].flag != 0)
-                    break;
-                if (strcmp(longOpts[index].name, "arp") == 0)
-                    arp = true;
-                else if (strcmp(longOpts[index].name, "icmp") == 0)
-                    icmp = true;
-                else{
-                    fprintf(stderr, "[ERR]: Zadal jste spatne argumenty.\n");
-                    exit(3);
-                }
-                break;
             case 'i':
                 if (optarg == NULL || (strcmp(optarg, "-p") == 0)){
                     fprintf(stderr, "[ERR]: Zadal jste spatne argumenty.\n");
@@ -185,14 +168,6 @@ void parse_arguments(int argc, char **argv)
                 else{
                     port = optarg;
                 }
-                break;
-
-            case 't':
-                tcp = true;
-                break;
-
-            case 'u':
-                udp = true;
                 break;
 
             case 'n':
