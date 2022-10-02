@@ -99,8 +99,7 @@ int numOfPackets = 1;
 
 FILE *pcapFile;
 std::string pcapFile_name = "";
-std::string netflow_collector_IP = "127.0.0.1";
-std::string netflow_collector_port = ":2055";
+std::string netflow_collector = "127.0.0.1:2055";
 int active_timer = 60;
 int inactive_timer = 10;
 int flowcache_size = 1024;
@@ -146,25 +145,33 @@ void parse_arguments(int argc, char **argv)
                 break;
 
             case 'c':
-                if (atoi(optarg) < 0){
-                    fprintf(stderr, "[ERR]: Parametru -p lze priradit pouze int.\n");
+                netflow_collector = optarg;
+                break;
+
+            case 'a':
+                if ((active_timer = atoi(optarg)) == 0){
+                    fprintf(stderr, "[ERR]: Parametru -a lze priradit pouze int.\n");
                     exit(3);
-                }
-                else{
-                    port = optarg;
                 }
                 break;
 
-            case 'n':
-                if ((numOfPackets = atoi(optarg)) == 0){
-                    fprintf(stderr, "[ERR]: Parametru -n lze priradit pouze int.\n");
+            case 'i':
+                if ((inactive_timer = atoi(optarg)) == 0){
+                    fprintf(stderr, "[ERR]: Parametru -i lze priradit pouze int.\n");
+                    exit(3);
+                }
+                break;
+
+            case 'm':
+                if ((flowcache_size = atoi(optarg)) == 0){
+                    fprintf(stderr, "[ERR]: Parametru -m lze priradit pouze int.\n");
                     exit(3);
                 }
                 break;
 
             default:
-                fprintf(stderr, "[ERR]: Zadal jste spatne argumenty.\n");
-                exit(3);
+                // TODO: cekat a cist data ze STDIN
+                break;
         }
     }
     if (!checkInterface){
