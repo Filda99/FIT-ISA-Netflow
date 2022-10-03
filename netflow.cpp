@@ -52,9 +52,6 @@
  * PRIVATE MACROS AND DEFINES
  ************************************/
 #define ETH_HDR  14
-//#define IPV4_PROT   0
-//#define IPV6_PROT   1
-#define IPV6_HDR    40
 
 /************************************
  * PRIVATE TYPEDEFS
@@ -77,15 +74,11 @@ int flowcache_size = 1024;
  * STATIC FUNCTION PROTOTYPES
  ************************************/
 void parse_arguments(int argc, char **argv);
-std::string fill_filter_str(std::string str);
-void icmp_v4(const u_char *packetWoEther,  const u_char *packet, bpf_u_int32 lengthOfPacket, std::string currentTime);
-void icmp_v6(const u_char *packetWoEther,  const u_char *packet, bpf_u_int32 lengthOfPacket, std::string currentTime);
-void udp_v4(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengthOfPacket,
-              std::string currentTime, unsigned int ipLen);
-void udp_v6(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengthOfPacket, std::string currentTime);
-void tcp_v4(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengthOfPacket,
-              std::string currentTime, unsigned int ipLen);
-void tcp_v6(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengthOfPacket, std::string currentTime);
+void icmp_v4(std::string srcIP, std::string dstIP);
+void udp_v4(std::string srcIP, std::string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
+              std::string currentTime);
+void tcp_v4(std::string srcIP, std::string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
+              std::string currentTime);
 void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet);
 
 
@@ -152,39 +145,9 @@ void parse_arguments(int argc, char **argv)
  * @param lengthOfPacket Delka paketu
  * @param currentTime Cas obdrzeni paketu
  */
-void icmp_v4(const u_char *packetWoEther,  const u_char *packet, bpf_u_int32 lengthOfPacket, std::string currentTime)
+void icmp_v4(std::string srcIP, std::string dstIP)
 {
     printf("\n(ICMPv4)");
-    // https://unix.superglobalmegacorp.com/Net2/newsrc/netinet/ip.h.html
-    struct ip* iphdrVar = (struct ip*)packetWoEther; //pretypovani na IP hlavicku, ze ktere ziskame adresy
-    std::string srcIpAddr = "";
-    std::string destIpAddr = "";
-    srcIpAddr.append(inet_ntoa(iphdrVar->ip_src));
-    destIpAddr.append(inet_ntoa(iphdrVar->ip_dst));
-    printf("\n%s %s > %s, length %d bytes\n", currentTime.c_str(), srcIpAddr.c_str(),
-           destIpAddr.c_str(), lengthOfPacket);
-    //print_packet_body(packet, lengthOfPacket);
-}
-
-/**
- * Zpracovani a vypsani protokolu icmp pro ipv6.
- * Ze zacatku pretypovani paketu na ip6 strukturu, ziskani ip adres, vypsani.
- * @param packetWoEther Packet bez ethernetove hlavicky
- * @param packet Obdrzeny packet
- * @param lengthOfPacket Delka paketu
- * @param currentTime Cas obdrzeni paketu
- */
-void icmp_v6(const u_char *packetWoEther,  const u_char *packet, bpf_u_int32 lengthOfPacket, std::string currentTime)
-{
-    printf("\n(ICMPv6)");
-    // https://unix.superglobalmegacorp.com/Net2/newsrc/netinet/ip.h.html
-    struct ip6_hdr* ip6hdrVar = (struct ip6_hdr*)packetWoEther; //pretypovani na IP hlavicku, ze ktere ziskame adresy
-    char srcIpAddr [INET6_ADDRSTRLEN];
-    char destIpAddr [INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, &(ip6hdrVar->ip6_src), srcIpAddr, INET6_ADDRSTRLEN);
-    inet_ntop(AF_INET6, &(ip6hdrVar->ip6_dst), destIpAddr, INET6_ADDRSTRLEN);
-    printf("\n%s %s > %s, length %d bytes\n", currentTime.c_str(), srcIpAddr, destIpAddr, lengthOfPacket);
-    //print_packet_body(packet, lengthOfPacket);
 }
 
 /**
@@ -198,56 +161,14 @@ void icmp_v6(const u_char *packetWoEther,  const u_char *packet, bpf_u_int32 len
  * @param currentTime Cas obdrzeni paketu
  * @param ipLen Delka hlavicky, o kterou se mame posunout pro ziskani portu
  */
-void udp_v4(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengthOfPacket,
-              std::string currentTime, unsigned int ipLen)
+void udp_v4(std::string srcIP, std::string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
+              std::string currentTime)
 {
     printf("\n(UDPv4)");
-    // IP source/dest
-    std::string srcIpAddr = "";
-    std::string destIpAddr = "";
-    // Pretypovani zbytku paketu na ip hlavicku
-    struct ip *iphdrVar = (struct ip *) packetWoEther;
-    srcIpAddr.append(inet_ntoa(iphdrVar->ip_src));
-    destIpAddr.append(inet_ntoa(iphdrVar->ip_dst));
-    const u_char *transportProtocolHdr = packet + ETH_HDR + ipLen;
-
-    // https://unix.superglobalmegacorp.com/Net2/newsrc/netinet/udp.h.html
-    struct udphdr *udphdrVar = (struct udphdr *) transportProtocolHdr; // udp struktura
-    uint16_t srcPort = ntohs(udphdrVar->uh_sport);
-    uint16_t dstPort = ntohs(udphdrVar->uh_dport);
-    printf("\n%s %s : %d > %s : %d, length %d bytes\n", currentTime.c_str(), srcIpAddr.c_str(), srcPort,
-           destIpAddr.c_str(), dstPort, lengthOfPacket);
-    //print_packet_body(packet, lengthOfPacket);
-}
-
-/**
- * Zpracovani a vypsani protokolu udp pro ipv6.
- * Ze zacatku pretypovani paketu na ip6 strukturu, pote ziskani ip adres,
- * posunuti se v paketu o delku hlavicky, pretypovani na upd strukturu,
- * zjisteni portu a nasledne vypsani.
- * @param packetWoEther Packet bez ethernetove hlavicky
- * @param packet Obdrzeny packet
- * @param lengthOfPacket Delka paketu
- * @param currentTime Cas obdrzeni paketu
- */
-void udp_v6(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengthOfPacket, std::string currentTime)
-{
-    printf("\n(UDPv6)");
-    // IP source/dest
-    struct ip6_hdr* ip6hdrVar = (struct ip6_hdr*)packetWoEther; //pretypovani na IP hlavicku, ze ktere ziskame adresy
-    char srcIpAddr [INET6_ADDRSTRLEN];
-    char destIpAddr [INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, &(ip6hdrVar->ip6_src), srcIpAddr, INET6_ADDRSTRLEN);
-    inet_ntop(AF_INET6, &(ip6hdrVar->ip6_dst), destIpAddr, INET6_ADDRSTRLEN);
-    const u_char *transportProtocolHdr = packet + ETH_HDR + IPV6_HDR;
-
-    // https://unix.superglobalmegacorp.com/Net2/newsrc/netinet/udp.h.html
-    struct udphdr *udphdrVar = (struct udphdr *) transportProtocolHdr; // udp struktura
-    uint16_t srcPort = ntohs(udphdrVar->uh_sport);
-    uint16_t dstPort = ntohs(udphdrVar->uh_dport);
-    printf("\n%s %s : %d > %s : %d, length %d bytes\n", currentTime.c_str(), srcIpAddr, srcPort,
-           destIpAddr, dstPort, lengthOfPacket);
-    //print_packet_body(packet, lengthOfPacket);
+    
+    struct udphdr *udpHdr = (struct udphdr *) transportProtocolHdr; // udp struktura
+    uint16_t srcPort = ntohs(udpHdr->uh_sport);
+    uint16_t dstPort = ntohs(udpHdr->uh_dport);
 }
 
 /**
@@ -261,56 +182,14 @@ void udp_v6(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengt
  * @param currentTime Cas obdrzeni paketu
  * @param ipLen Delka hlavicky, o kterou se mame posunout pro ziskani portu
  */
-void tcp_v4(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengthOfPacket,
-              std::string currentTime, unsigned int ipLen)
+void tcp_v4(std::string srcIP, std::string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
+              std::string currentTime)
 {
     printf("\n(TCPv4)");
-    // IP source/dest
-    std::string srcIpAddr = "";
-    std::string destIpAddr = "";
-    // Pretypovani zbytku paketu na ip hlavicku
-    struct ip* iphdrVar = (struct ip*)packetWoEther;
-    srcIpAddr.append(inet_ntoa(iphdrVar->ip_src));
-    destIpAddr.append(inet_ntoa(iphdrVar->ip_dst));
-    const u_char *transportProtocolHdr = packet + ETH_HDR + ipLen;
 
-    // https://unix.superglobalmegacorp.com/BSD4.4/newsrc/netinet/tcp.h.html
-    struct tcphdr* tcphdrVar = (struct tcphdr*)transportProtocolHdr; // udp struktura
-    uint16_t srcPort = ntohs(tcphdrVar->th_sport);
-    uint16_t dstPort = ntohs(tcphdrVar->th_dport);
-    printf("\n%s %s : %d > %s : %d, length %d bytes\n", currentTime.c_str(), srcIpAddr.c_str(), srcPort,
-           destIpAddr.c_str(), dstPort, lengthOfPacket);
-    //print_packet_body(packet, lengthOfPacket);
-}
-
-/**
- * Zpracovani a vypsani protokolu tcp pro ipv6.
- * Ze zacatku pretypovani paketu na ip6 strukturu, pote ziskani ip adres,
- * posunuti se v paketu o delku hlavicky, pretypovani na tcp strukturu,
- * zjisteni portu a nasledne vypsani.
- * @param packetWoEther Packet bez ethernetove hlavicky
- * @param packet Obdrzeny packet
- * @param lengthOfPacket Delka paketu
- * @param currentTime Cas obdrzeni paketu
- */
-void tcp_v6(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengthOfPacket, std::string currentTime)
-{
-    printf("\n(TCPv6)");
-    // IP source/dest
-    struct ip6_hdr* ip6hdrVar = (struct ip6_hdr*)packetWoEther; //pretypovani na IP hlavicku, ze ktere ziskame adresy
-    char srcIpAddr [INET6_ADDRSTRLEN];
-    char destIpAddr [INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, &(ip6hdrVar->ip6_src), srcIpAddr, INET6_ADDRSTRLEN);
-    inet_ntop(AF_INET6, &(ip6hdrVar->ip6_dst), destIpAddr, INET6_ADDRSTRLEN);
-    const u_char *transportProtocolHdr = packet + ETH_HDR + IPV6_HDR;
-
-    // https://unix.superglobalmegacorp.com/Net2/newsrc/netinet/udp.h.html
-    struct tcphdr* tcphdrVar = (struct tcphdr*)transportProtocolHdr; // udp struktura
-    uint16_t srcPort = ntohs(tcphdrVar->th_sport);
-    uint16_t dstPort = ntohs(tcphdrVar->th_dport);
-    printf("\n%s %s : %d > %s : %d, length %d bytes\n", currentTime.c_str(), srcIpAddr, srcPort,
-           destIpAddr, dstPort, lengthOfPacket);
-    //print_packet_body(packet, lengthOfPacket);
+    struct tcphdr* tcpHdr = (struct tcphdr*)transportProtocolHdr; // udp struktura
+    uint16_t srcPort = ntohs(tcpHdr->th_sport);
+    uint16_t dstPort = ntohs(tcpHdr->th_dport);
 }
 
 /**
@@ -329,19 +208,24 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
     // Aktualni cas prijeti paketu
     // TODO: add time from packet header
     std::string currentTime = "";
+
     // Posunuti se v paketu o ethernetovou hlavicku
     const u_char *packetIP = packet + ETH_HDR;
 
+    std::string srcIp = "";
+    std::string dstIP = "";
+
+    struct ip* ipHdr = (struct ip*)packetIP;
+    srcIp.append(inet_ntoa(ipHdr->ip_src));
+    dstIP.append(inet_ntoa(ipHdr->ip_dst));
+    
     if(type == 0x0800){ //ipv4
-        // Pretypovani zbytku paketu na ip hlavicku
-        // https://sites.uclouvain.be/SystInfo/usr/include/netinet/ip.h.html
         struct iphdr *ipHeader = (struct iphdr*)packetIP;
 
-        // Podle protokolu se bude zpracovavat budto ICMP, TCP nebo UDP
         switch (ipHeader->protocol) {
             // ICMP
             case 1:
-                icmp_v4(packetIP, packet, header->len, currentTime);
+                icmp_v4(srcIp, dstIP);
                 break;
 
             // TCP + UDP
@@ -349,76 +233,18 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
             case 17:{ // V zavorkach kvuli deklarovani promenne
                 // Promenliva delka hlavicky
                 unsigned int ipLen = ipHeader->ihl * 4;
+                const u_char *transportProtocolHdr = packet + ETH_HDR + ipLen;
+
                 if(ipHeader->protocol == 17)
-                    udp_v4(packetIP, packet, header->len, currentTime, ipLen);
+                    udp_v4(srcIp, dstIP, transportProtocolHdr, header->len, currentTime);
                 else
-                    tcp_v4(packetIP, packet, header->len, currentTime, ipLen);
+                    tcp_v4(srcIp, dstIP, transportProtocolHdr, header->len, currentTime);
                 break;
             }
 
             default:
                 break;
         }
-    }
-    else if (type == 0x86DD){ // IPV6
-        // https://sites.uclouvain.be/SystInfo/usr/include/netinet/ip.h.html
-        // Pretypovani zbytku paketu na ip hlavicku
-        struct ip6_hdr *ip6Header = (struct ip6_hdr*)packetIP;
-
-        // Podle protokolu se bude zpracovavat budto ICMP, TCP nebo UDP
-        switch (ip6Header->ip6_nxt) {
-            // ICMPv6
-            case 58:
-                icmp_v6(packetIP, packet, header->len, currentTime);
-                break;
-
-            // TCP
-            case 6:
-                tcp_v6(packetIP, packet, header->len, currentTime);
-                break;
-
-            // UDP
-            case 17:
-                udp_v6(packetIP, packet, header->len, currentTime);
-                break;
-
-            default:
-                break;
-        }
-    }
-    else if (type == 0x0806) {   // arp
-        // https://unix.superglobalmegacorp.com/BSD4.4/newsrc/netinet/if_ether.h.html
-        // Posunuti se v paketu o ethernetovou hlavicku
-        //const u_char *packetArp = packet + ETH_HDR;
-        struct ether_arp *etherArp = (struct ether_arp *) packetIP;
-
-        // Ziskani source IP a MAC adresy
-        struct in_addr *srcIP = (struct in_addr *) etherArp->arp_spa;
-        char* srcMac = ether_ntoa((struct ether_addr*) &etherArp->arp_sha);
-        std::string printAddr = ""; // retezec pro vypis adres
-        // Format vypisu v podobe: sourceIP (sourceMac) > destIP (destMac)
-        printAddr.append(inet_ntoa(*srcIP));
-        printAddr.append(" (");
-        printAddr.append(srcMac);
-        printAddr.append(") > ");
-
-        // Ziskani dest IP a MAC adresy
-        struct in_addr *dstIP = (struct in_addr *) etherArp->arp_tpa;
-        char *dstMac = ether_ntoa((struct ether_addr *) &etherArp->arp_tha);
-        // Dovypsani
-        printAddr.append(inet_ntoa(*dstIP));
-        printAddr.append(" (");
-        printAddr.append(dstMac);
-        printAddr.append(")");
-
-        std::string option;
-        if (ntohs(etherArp->arp_op) == ARPOP_REQUEST)
-            option = "requests";
-        else if (ntohs(etherArp->arp_op) == ARPOP_REPLY)
-            option = "reply";
-
-        printf("%s %s (%s), length %d bytes\n", currentTime.c_str(), printAddr.c_str(), option.c_str(), header->len);
-        //print_packet_body(packet, header->len);
     }
 }
 
