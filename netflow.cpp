@@ -67,8 +67,7 @@
 /************************************
  * GLOBAL VARIABLES
  ************************************/
-FILE *pcapFile;
-std::string pcapFile_name = "";
+std::string pcapFile_name = "STDIN";
 std::string netflow_collector = "127.0.0.1:2055";
 int active_timer = 60;
 int inactive_timer = 10;
@@ -438,7 +437,7 @@ int main (int argc, char **argv)
     // Otevreni zarizeni pro sledovani paketu
     handle = pcap_open_offline(pcapFile_name.c_str(), errbuf);
     if (handle == NULL) {
-        fprintf(stderr, "[ERR]: Nepodařilo se mi otevřít zařízení %s: %s\n", device, errbuf);
+        fprintf(stderr, "[ERR]: Nepodařilo se mi otevřít soubor %s, %s\n",pcapFile_name.c_str(), errbuf);
         return(2);
     }
     while(packet = pcap_next(handle, &header))
