@@ -1,41 +1,27 @@
 /*********************************************************************************************************************
- * Předmět:     Počítačové komunikace a sítě
- * Projekt:     Sniffer packetů
- * Datum:       4/2021
- * Vypracoval:  Filip Jahn
+ * Předmět:     ISA - Síťové aplikace a správa sítí
+ * Projekt:     Generování NetFlow dat ze zachycené síťové komunikace
+ * Datum:       10/2022
+ * @file:       netflow.c    
+ * @author:     Filip Jahn
  * Login:       xjahnf00
  *
  * *******************************************************************************************************************
- * Zadání:
- * Navrhněte a implementujte síťový analyzátor v C/C++/C#,
- * který bude schopný na určitém síťovém rozhraním zachytávat a filtrovat pakety.
- *
+ * @brief:
+ * V rámci projektu implementujte NetFlow exportér, který ze zachycených síťových dat ve formátu pcap 
+ * vytvoří záznamy NetFlow, které odešle na kolektor.
  * *******************************************************************************************************************
  * Spuštění:
- * ./ipk-sniffer [-i rozhraní | --interface rozhraní] {-p port} {[--tcp|-t] [--udp|-u] [--arp] [--icmp] } {-n num}
- * -> Složené závorky {} znamenají, že volba je nepovinná, oproti tomu [] znamená povinnou volbu.
- *      -i eth0 (právě jedno rozhraní, na kterém se bude poslouchat)
- *      -p 23 (bude filtrování paketů na daném rozhraní podle portu)
- *      -t nebo --tcp (bude zobrazovat pouze TCP pakety)
- *      -u nebo --udp (bude zobrazovat pouze UDP pakety)
- *      --icmp (bude zobrazovat pouze ICMPv4 a ICMPv6 pakety)
- *      --arp (bude zobrazovat pouze ARP rámce)
- *      -> Pokud nebudou konkrétní protokoly specifikovány, uvažují se k tisknutí všechny
- *      -n 10 (určuje počet paketů, které se mají zobrazit)
- *
+ * ./flow [-f <file>] [-c <netflow_collector>[:<port>]] [-a <active_timer>] [-i <inactive_timer>] [-m <count>]
+ *      - f <file> - jméno analyzovaného souboru nebo STDIN
+ *      - c <neflow_collector:port> - IP adresa, nebo hostname NetFlow kolektoru. Volitelně i UDP port
+ *      - a <active_timer> - interval v sekundách, po kterém se exportují aktivní záznamy na kolektor
+ *      - i <seconds> - interval v sekundách, po jehož vypršení se exportují neaktivní záznamy na kolektor
+ *      - m <count> - velikost flow-cache. Při dosažení max. velikosti dojde k exportu nejstaršího záznamu v cachi na kolektor
+ * 
  * *******************************************************************************************************************
  */
 
-
-
-/**
- ********************************************************************************
- * @file    ultrasonic_m5stack.c
- * @author  user
- * @date    Sep 26, 2022
- * @brief   
- ********************************************************************************
- */
 
 /************************************
  * INCLUDES
