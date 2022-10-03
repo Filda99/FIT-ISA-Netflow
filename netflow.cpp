@@ -67,7 +67,7 @@
 /************************************
  * GLOBAL VARIABLES
  ************************************/
-std::string pcapFile_name = "STDIN";
+std::string pcapFile_name = "-";
 std::string netflow_collector = "127.0.0.1:2055";
 int active_timer = 60;
 int inactive_timer = 10;
@@ -78,7 +78,6 @@ int flowcache_size = 1024;
  ************************************/
 void parse_arguments(int argc, char **argv);
 std::string fill_filter_str(std::string str);
-std::string time_rfc3339();
 void icmp_v4(const u_char *packetWoEther,  const u_char *packet, bpf_u_int32 lengthOfPacket, std::string currentTime);
 void icmp_v6(const u_char *packetWoEther,  const u_char *packet, bpf_u_int32 lengthOfPacket, std::string currentTime);
 void udp_v4(const u_char *packetWoEther, const u_char *packet, bpf_u_int32 lengthOfPacket,
@@ -328,7 +327,8 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
     struct ether_header *ipvNum = (struct ether_header*)packet;
     u_short type = ntohs(ipvNum->ether_type);
     // Aktualni cas prijeti paketu
-    std::string currentTime = time_rfc3339();
+    // TODO: add time from packet header
+    std::string currentTime = "";
     // Posunuti se v paketu o ethernetovou hlavicku
     const u_char *packetIP = packet + ETH_HDR;
 
@@ -435,15 +435,18 @@ int main (int argc, char **argv)
     char errbuf[PCAP_ERRBUF_SIZE];
 
     // Otevreni zarizeni pro sledovani paketu
+    printf("File: %s", pcapFile_name.c_str());
     handle = pcap_open_offline(pcapFile_name.c_str(), errbuf);
     if (handle == NULL) {
         fprintf(stderr, "[ERR]: Nepodařilo se mi otevřít soubor %s, %s\n",pcapFile_name.c_str(), errbuf);
         return(2);
     }
-    while(packet = pcap_next(handle, &header))
-    {
-        printf("Got packet!");
-    }
+    // while(packet = pcap_next(handle, &header))
+    // {
+    //     printf("Got packet!");
+    // }
+
+    pcap_loop(handle, 0, process_packet, NULL);
     
 
     pcap_close(handle);
