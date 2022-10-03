@@ -67,22 +67,6 @@
 /************************************
  * GLOBAL VARIABLES
  ************************************/
-// Boolean hodnoty, ktere protokoly se maji zobrazovat
-bool tcp = false;
-bool udp = false;
-bool arp = false;
-bool icmp = false;
-
-// Rozhranni, na kterem se posloucha
-char* device;
-
-// Port
-char* port = (char*)"0";
-
-// Pocet paketu, kolik se jich ma zobrazit
-// Defaultne 1
-int numOfPackets = 1;
-
 FILE *pcapFile;
 std::string pcapFile_name = "";
 std::string netflow_collector = "127.0.0.1:2055";
@@ -160,64 +144,6 @@ void parse_arguments(int argc, char **argv)
                 break;
         }
     }
-}
-
-/**
- * Naplni pole filterStr retezcem.
- * Ve funkci pcap_compile(), kam retezec posilame, probehne zpracovani tohoto retezce
- * a tim se nam vrati spravna struktura.
- * @param str Retezec, ktery se ma naplnit
- */
-std::string fill_filter_str(std::string str)
-{
-    bool addNextProtocol = false;
-    if (strcmp(port, "0") != 0){
-        str.append("port ");
-        str.append(port);
-        str.append(" and ");
-    }
-    str.append(" (");
-    if(tcp){
-        str.append("tcp");
-        addNextProtocol = true;
-    }
-    if(udp){
-        if (addNextProtocol)
-            str.append(" or ");
-        str.append("udp");
-        addNextProtocol = true;
-    }
-    if(arp){
-        if (addNextProtocol)
-            str.append(" or ");
-        str.append("arp");
-        addNextProtocol = true;
-    }
-    if(icmp){
-        if (addNextProtocol)
-            str.append(" or ");
-        str.append("icmp or icmp6");
-    }
-    str.append(")");
-    return str;
-}
-
-/**
- * Ziska momentalni cas a ve spravnem formatu vraci.
- * @return Retezec, ve kterem je ulozen cas zachyceni paketu
- */
-std::string time_rfc3339()
-{
-    char cstr[80];
-    timeval curTime;
-    gettimeofday(&curTime, NULL);
-    int milli = curTime.tv_usec / 1000;
-    char buffer [60];
-    strftime(buffer,59,"%FT%T", localtime(&curTime.tv_sec));
-    // %03d - vypis tri cela cisla
-    sprintf(cstr, "%s.%03d+02:00", buffer, milli);
-    std::string s(cstr);    // String s zalozen na zaklade pole cstr
-    return s;
 }
 
 /**
@@ -504,21 +430,10 @@ int main (int argc, char **argv)
     }
     parse_arguments(argc, argv);
 
-
-    struct bpf_program fp;
-    // Hodnota pro filtrovani
-    std::string filterStr = "";    // https://bit.ly/3giiyKP
-    filterStr = fill_filter_str(filterStr);
-    bpf_u_int32 net;
-    
-
     pcap_t *handle;
     struct pcap_pkthdr header;
     const uint8_t *packet;
     char errbuf[PCAP_ERRBUF_SIZE];
-
-
-
 
     // Otevreni zarizeni pro sledovani paketu
     handle = pcap_open_offline(pcapFile_name.c_str(), errbuf);
@@ -530,17 +445,8 @@ int main (int argc, char **argv)
     {
         printf("Got packet!");
     }
-    // if (pcap_compile(handle, &fp, filterStr.c_str(), 0, net) == -1) {
-    //     fprintf(stderr, "[ERR]: Parsování filtru se neydařilo %s: %s\n", filterStr.c_str(), pcap_geterr(handle));
-    //     return(2);
-    // }
-    // if (pcap_setfilter(handle, &fp) == -1) {
-    //     fprintf(stderr, "[ERR]: Filtr se nepodařilo uložit do pcap %s: %s\n", filterStr.c_str(), pcap_geterr(handle));
-    //     return(2);
-    // }
-    // pcap_loop(handle, numOfPackets, process_packet, NULL);
+    
 
-    // pcap_freecode(&fp);
     pcap_close(handle);
 
     return(0);
