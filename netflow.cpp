@@ -268,6 +268,23 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
     }
 }
 
+int pcap_set_filter(pcap_t *handle)
+{
+    string filterStr = "(tcp or udp or icmp)";
+    struct bpf_program fp;
+    bpf_u_int32 net;
+
+    if (pcap_compile(handle, &fp, filterStr.c_str(), 0, net) == -1) {
+        fprintf(stderr, "[ERR]: Parsování filtru se neydařilo %s: %s\n", filterStr.c_str(), pcap_geterr(handle));
+        return(2);
+    }
+    if (pcap_setfilter(handle, &fp) == -1) {
+        fprintf(stderr, "[ERR]: Filtr se nepodařilo uložit do pcap %s: %s\n", filterStr.c_str(), pcap_geterr(handle));
+        return(2);
+    }
+    return 1;
+}
+
 int main (int argc, char **argv)
 {
     if (argc == 1){
@@ -276,12 +293,7 @@ int main (int argc, char **argv)
     parse_arguments(argc, argv);
 
     pcap_t *handle;
-    struct pcap_pkthdr header;
-    const uint8_t *packet;
     char errbuf[PCAP_ERRBUF_SIZE];
-    string filterStr = "(tcp or udp or icmp)";
-    struct bpf_program fp;
-    bpf_u_int32 net;
 
     // Otevreni zarizeni pro sledovani paketu
     handle = pcap_open_offline(pcapFile_name.c_str(), errbuf);
@@ -289,12 +301,9 @@ int main (int argc, char **argv)
         fprintf(stderr, "[ERR]: Nepodařilo se mi otevřít soubor %s, %s\n",pcapFile_name.c_str(), errbuf);
         return(2);
     }
-    if (pcap_compile(handle, &fp, filterStr.c_str(), 0, net) == -1) {
-        fprintf(stderr, "[ERR]: Parsování filtru se neydařilo %s: %s\n", filterStr.c_str(), pcap_geterr(handle));
-        return(2);
-    }
-    if (pcap_setfilter(handle, &fp) == -1) {
-        fprintf(stderr, "[ERR]: Filtr se nepodařilo uložit do pcap %s: %s\n", filterStr.c_str(), pcap_geterr(handle));
+
+    if (pcap_set_filter(handle) != 1){
+        pcap_close(handle);
         return(2);
     }
     
