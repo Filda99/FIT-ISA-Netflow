@@ -58,25 +58,25 @@ using namespace std;
  ************************************/
 
 struct flow_record {
-    char        srcIP[4];
-    char        dstIP[4];
+    char        srcIP[4] = "";
+    char        dstIP[4] = "";
     char        nextHop[4] = "";
-    uint16_t    scrIf;
-    uint16_t    dstIf;
-    uint32_t    dPkts;
-    uint32_t    dOctets;
-    uint32_t    first;
-    uint32_t    last;
-    uint16_t    srcPort;
-    uint16_t    dstPort;
-    uint8_t     pad1;
-    uint8_t     flgs;
-    uint8_t     prot;
-    uint8_t     tos;
-    uint16_t    srcAs;
-    uint16_t    dstAs;
-    uint8_t     srcMask;
-    uint8_t     dstMask;
+    uint16_t    scrIf = 0;
+    uint16_t    dstIf = 0;
+    uint32_t    dPkts = 0;
+    uint32_t    dOctets = 0;
+    uint32_t    first = 0;
+    uint32_t    last = 0;
+    uint16_t    srcPort = 0;
+    uint16_t    dstPort = 0;
+    uint8_t     pad1 = 0;
+    uint8_t     flgs = 0;
+    uint8_t     prot = 0;
+    uint8_t     tos = 0;
+    uint16_t    srcAs = 0;
+    uint16_t    dstAs = 0;
+    uint8_t     srcMask = 32;
+    uint8_t     dstMask = 32;
     uint16_t    pad2 = 0;    
 };
 
@@ -118,11 +118,8 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
  */
 void parse_arguments(int argc, char **argv)
 {
-    bool checkInterface = false;
-
     int c;
     while((c = getopt(argc, argv, "f:c:a:i:m:")) != -1){
-        printf("%c\n", c);
         switch (c)
         {
             case 'f':
@@ -155,7 +152,6 @@ void parse_arguments(int argc, char **argv)
                 break;
 
             default:
-                // TODO: cekat a cist data ze STDIN
                 break;
         }
     }
@@ -178,7 +174,7 @@ void icmp_v4(char *srcIP, char *dstIP)
     tup1 = make_tuple(srcIP, dstIP, 0, 0, 0);
 
     
-    if ( auto it{ myMap.find( tup ) }; it != std::end( myMap ) ) {
+    if ( auto it{ flow_map.find( tup ) }; it != end( flow_map ) ) {
         cout << "YES " << get<1>(tup);
     }
     
