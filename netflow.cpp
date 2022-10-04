@@ -294,7 +294,6 @@ int main (int argc, char **argv)
     bpf_u_int32 net;
 
     // Otevreni zarizeni pro sledovani paketu
-    printf("File: %s", pcapFile_name.c_str());
     handle = pcap_open_offline(pcapFile_name.c_str(), errbuf);
     if (handle == NULL) {
         fprintf(stderr, "[ERR]: Nepodařilo se mi otevřít soubor %s, %s\n",pcapFile_name.c_str(), errbuf);
