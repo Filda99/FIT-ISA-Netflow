@@ -39,9 +39,7 @@
 #include <netinet/udp.h>        //udp hlavicka
 #include <netinet/tcp.h>        //tcp hlavicka
 #include <netinet/if_ether.h>   //ethernet hlavicka
-#include <net/if_arp.h>         //arp hlavicka
 #include <netinet/ip.h>         //ip hlavicka
-#include <netinet/ip6.h>        //ipv6 hlavicka
 //#include <math.h>               //ceil()
 
 /************************************
@@ -259,12 +257,23 @@ int main (int argc, char **argv)
     struct pcap_pkthdr header;
     const uint8_t *packet;
     char errbuf[PCAP_ERRBUF_SIZE];
+    std::string filterStr = "(tcp or udp or icmp)";
+    struct bpf_program fp;
+    bpf_u_int32 net;
 
     // Otevreni zarizeni pro sledovani paketu
     printf("File: %s", pcapFile_name.c_str());
     handle = pcap_open_offline(pcapFile_name.c_str(), errbuf);
     if (handle == NULL) {
         fprintf(stderr, "[ERR]: Nepodařilo se mi otevřít soubor %s, %s\n",pcapFile_name.c_str(), errbuf);
+        return(2);
+    }
+    if (pcap_compile(handle, &fp, filterStr.c_str(), 0, net) == -1) {
+        fprintf(stderr, "[ERR]: Parsování filtru se neydařilo %s: %s\n", filterStr.c_str(), pcap_geterr(handle));
+        return(2);
+    }
+    if (pcap_setfilter(handle, &fp) == -1) {
+        fprintf(stderr, "[ERR]: Filtr se nepodařilo uložit do pcap %s: %s\n", filterStr.c_str(), pcap_geterr(handle));
         return(2);
     }
     // while(packet = pcap_next(handle, &header))
