@@ -40,8 +40,10 @@
 #include <netinet/tcp.h>        //tcp hlavicka
 #include <netinet/if_ether.h>   //ethernet hlavicka
 #include <netinet/ip.h>         //ip hlavicka
-//#include <math.h>               //ceil()
+#include <map>
+#include <tuple>
 
+using namespace std;
 /************************************
  * EXTERN VARIABLES
  ************************************/
@@ -55,6 +57,29 @@
  * PRIVATE TYPEDEFS
  ************************************/
 
+struct flow_record {
+    char        srcIP[4];
+    char        dstIP[4];
+    char        nextHop[4] = "";
+    uint16_t    scrIf;
+    uint16_t    dstIf;
+    uint32_t    dPkts;
+    uint32_t    dOctets;
+    uint32_t    first;
+    uint32_t    last;
+    uint16_t    srcPort;
+    uint16_t    dstPort;
+    uint8_t     pad1;
+    uint8_t     flgs;
+    uint8_t     prot;
+    uint8_t     tos;
+    uint16_t    srcAs;
+    uint16_t    dstAs;
+    uint8_t     srcMask;
+    uint8_t     dstMask;
+    uint16_t    pad2 = 0;    
+};
+
 /************************************
  * STATIC VARIABLES
  ************************************/
@@ -62,21 +87,22 @@
 /************************************
  * GLOBAL VARIABLES
  ************************************/
-std::string pcapFile_name = "-";
-std::string netflow_collector = "127.0.0.1:2055";
+string pcapFile_name = "-";
+string netflow_collector = "127.0.0.1:2055";
 int active_timer = 60;
 int inactive_timer = 10;
 int flowcache_size = 1024;
+std::map<tuple <char*, char*, uint16_t, uint16_t, uint8_t> , flow_record> flow_map;
 
 /************************************
  * STATIC FUNCTION PROTOTYPES
  ************************************/
 void parse_arguments(int argc, char **argv);
-void icmp_v4(std::string srcIP, std::string dstIP);
-void udp_v4(std::string srcIP, std::string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
-              std::string currentTime);
-void tcp_v4(std::string srcIP, std::string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
-              std::string currentTime);
+void icmp_v4(string srcIP, string dstIP);
+void udp_v4(string srcIP, string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
+              string currentTime);
+void tcp_v4(string srcIP, string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
+              string currentTime);
 void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet);
 
 
@@ -143,9 +169,19 @@ void parse_arguments(int argc, char **argv)
  * @param lengthOfPacket Delka paketu
  * @param currentTime Cas obdrzeni paketu
  */
-void icmp_v4(std::string srcIP, std::string dstIP)
+void icmp_v4(char *srcIP, char *dstIP)
 {
     printf("\n(ICMPv4)");
+    cout << srcIP << " " << dstIP;
+    tuple <char*, char*, uint16_t, uint16_t, uint8_t> tup, tup1;
+    tup = make_tuple(srcIP, dstIP, 0, 0, 0);
+    tup1 = make_tuple(srcIP, dstIP, 0, 0, 0);
+
+    
+    if ( auto it{ myMap.find( tup ) }; it != std::end( myMap ) ) {
+        cout << "YES " << get<1>(tup);
+    }
+    
 }
 
 /**
@@ -159,8 +195,8 @@ void icmp_v4(std::string srcIP, std::string dstIP)
  * @param currentTime Cas obdrzeni paketu
  * @param ipLen Delka hlavicky, o kterou se mame posunout pro ziskani portu
  */
-void udp_v4(std::string srcIP, std::string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
-              std::string currentTime)
+void udp_v4(string srcIP, string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
+              string currentTime)
 {
     printf("\n(UDPv4)");
     
@@ -180,8 +216,8 @@ void udp_v4(std::string srcIP, std::string dstIP, const u_char *transportProtoco
  * @param currentTime Cas obdrzeni paketu
  * @param ipLen Delka hlavicky, o kterou se mame posunout pro ziskani portu
  */
-void tcp_v4(std::string srcIP, std::string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
-              std::string currentTime)
+void tcp_v4(string srcIP, string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
+              string currentTime)
 {
     printf("\n(TCPv4)");
 
@@ -205,17 +241,17 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
     u_short type = ntohs(ipvNum->ether_type);
     // Aktualni cas prijeti paketu
     // TODO: add time from packet header
-    std::string currentTime = "";
+    string currentTime = "";
 
     // Posunuti se v paketu o ethernetovou hlavicku
     const u_char *packetIP = packet + ETH_HDR;
 
-    std::string srcIp = "";
-    std::string dstIP = "";
+    char *srcIP;
+    char *dstIP;
 
     struct ip* ipHdr = (struct ip*)packetIP;
-    srcIp.append(inet_ntoa(ipHdr->ip_src));
-    dstIP.append(inet_ntoa(ipHdr->ip_dst));
+    srcIP = inet_ntoa(ipHdr->ip_src);
+    dstIP = inet_ntoa(ipHdr->ip_dst);
     
     if(type == 0x0800){ //ipv4
         struct iphdr *ipHeader = (struct iphdr*)packetIP;
@@ -223,7 +259,7 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
         switch (ipHeader->protocol) {
             // ICMP
             case 1:
-                icmp_v4(srcIp, dstIP);
+                icmp_v4(srcIP, dstIP);
                 break;
 
             // TCP + UDP
@@ -233,10 +269,10 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
                 unsigned int ipLen = ipHeader->ihl * 4;
                 const u_char *transportProtocolHdr = packet + ETH_HDR + ipLen;
 
-                if(ipHeader->protocol == 17)
-                    udp_v4(srcIp, dstIP, transportProtocolHdr, header->len, currentTime);
-                else
-                    tcp_v4(srcIp, dstIP, transportProtocolHdr, header->len, currentTime);
+                // if(ipHeader->protocol == 17)
+                //     udp_v4(srcIP, dstIP, transportProtocolHdr, header->len, currentTime);
+                // else
+                //     tcp_v4(srcIP, dstIP, transportProtocolHdr, header->len, currentTime);
                 break;
             }
 
@@ -257,7 +293,7 @@ int main (int argc, char **argv)
     struct pcap_pkthdr header;
     const uint8_t *packet;
     char errbuf[PCAP_ERRBUF_SIZE];
-    std::string filterStr = "(tcp or udp or icmp)";
+    string filterStr = "(tcp or udp or icmp)";
     struct bpf_program fp;
     bpf_u_int32 net;
 
@@ -276,13 +312,8 @@ int main (int argc, char **argv)
         fprintf(stderr, "[ERR]: Filtr se nepodařilo uložit do pcap %s: %s\n", filterStr.c_str(), pcap_geterr(handle));
         return(2);
     }
-    // while(packet = pcap_next(handle, &header))
-    // {
-    //     printf("Got packet!");
-    // }
-
-    pcap_loop(handle, 0, process_packet, NULL);
     
+    pcap_loop(handle, 0, process_packet, NULL);
 
     pcap_close(handle);
 
