@@ -168,11 +168,10 @@ void parse_arguments(int argc, char **argv)
  */
 void icmp_v4(flow_record flow)
 {
-    printf("\n(ICMPv4)");
-
     // srcIP, dstIP, srcPort, dstPort, protocol
-    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP.s_addr, flow.dstIP.s_addr, 0u, 0u, 0u);
+    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP.s_addr, flow.dstIP.s_addr, 0u, 0u, flow.prot);
     flow_map[keys] = flow;
+    
     
 }
 
@@ -187,14 +186,14 @@ void icmp_v4(flow_record flow)
  * @param currentTime Cas obdrzeni paketu
  * @param ipLen Delka hlavicky, o kterou se mame posunout pro ziskani portu
  */
-void udp_v4(string srcIP, string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
-              string currentTime)
+void udp_v4(flow_record flow, const u_char *transportProtocolHdr)
 {
-    printf("\n(UDPv4)");
-    
     struct udphdr *udpHdr = (struct udphdr *) transportProtocolHdr; // udp struktura
     uint16_t srcPort = ntohs(udpHdr->uh_sport);
     uint16_t dstPort = ntohs(udpHdr->uh_dport);
+
+    // srcIP, dstIP, srcPort, dstPort, protocol
+    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP.s_addr, flow.dstIP.s_addr, srcPort, dstPort, flow.prot);
 }
 
 /**
@@ -208,14 +207,14 @@ void udp_v4(string srcIP, string dstIP, const u_char *transportProtocolHdr, bpf_
  * @param currentTime Cas obdrzeni paketu
  * @param ipLen Delka hlavicky, o kterou se mame posunout pro ziskani portu
  */
-void tcp_v4(string srcIP, string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
-              string currentTime)
+void tcp_v4(flow_record flow, const u_char *transportProtocolHdr)
 {
-    printf("\n(TCPv4)");
-
     struct tcphdr* tcpHdr = (struct tcphdr*)transportProtocolHdr; // udp struktura
     uint16_t srcPort = ntohs(tcpHdr->th_sport);
     uint16_t dstPort = ntohs(tcpHdr->th_dport);
+
+    // srcIP, dstIP, srcPort, dstPort, protocol
+    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP.s_addr, flow.dstIP.s_addr, srcPort, dstPort, flow.prot);
 }
 
 /**
