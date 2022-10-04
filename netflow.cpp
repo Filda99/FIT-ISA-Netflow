@@ -58,8 +58,8 @@ using namespace std;
  ************************************/
 
 struct flow_record {
-    char        srcIP[4] = "";
-    char        dstIP[4] = "";
+    struct in_addr srcIP;
+    struct in_addr dstIP;
     char        nextHop[4] = "";
     uint16_t    scrIf = 0;
     uint16_t    dstIf = 0;
@@ -92,13 +92,13 @@ string netflow_collector = "127.0.0.1:2055";
 int active_timer = 60;
 int inactive_timer = 10;
 int flowcache_size = 1024;
-std::map<tuple <char*, char*, uint16_t, uint16_t, uint8_t> , flow_record> flow_map;
+map< tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t>, flow_record >flow_map;
 
 /************************************
  * STATIC FUNCTION PROTOTYPES
  ************************************/
 void parse_arguments(int argc, char **argv);
-void icmp_v4(string srcIP, string dstIP);
+void icmp_v4(flow_record flow);
 void udp_v4(string srcIP, string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
               string currentTime);
 void tcp_v4(string srcIP, string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
@@ -157,6 +157,7 @@ void parse_arguments(int argc, char **argv)
     }
 }
 
+
 /**
  * Zpracovani a vypsani protokolu icmp pro ipv4.
  * Ze zacatku pretypovani paketu na ip strukturu, ziskani ip adres, vypsani.
@@ -165,18 +166,13 @@ void parse_arguments(int argc, char **argv)
  * @param lengthOfPacket Delka paketu
  * @param currentTime Cas obdrzeni paketu
  */
-void icmp_v4(char *srcIP, char *dstIP)
+void icmp_v4(flow_record flow)
 {
     printf("\n(ICMPv4)");
-    cout << srcIP << " " << dstIP;
-    tuple <char*, char*, uint16_t, uint16_t, uint8_t> tup, tup1;
-    tup = make_tuple(srcIP, dstIP, 0, 0, 0);
-    tup1 = make_tuple(srcIP, dstIP, 0, 0, 0);
 
-    
-    if ( auto it{ flow_map.find( tup ) }; it != end( flow_map ) ) {
-        cout << "YES " << get<1>(tup);
-    }
+    // srcIP, dstIP, srcPort, dstPort, protocol
+    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP.s_addr, flow.dstIP.s_addr, 0u, 0u, 0u);
+    flow_map[keys] = flow;
     
 }
 
@@ -232,6 +228,8 @@ void tcp_v4(string srcIP, string dstIP, const u_char *transportProtocolHdr, bpf_
  */
 void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
 {
+    flow_record flow;
+
     // https://unix.superglobalmegacorp.com/Net2/newsrc/netinet/if_ether.h.html
     struct ether_header *ipvNum = (struct ether_header*)packet;
     u_short type = ntohs(ipvNum->ether_type);
@@ -242,20 +240,19 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
     // Posunuti se v paketu o ethernetovou hlavicku
     const u_char *packetIP = packet + ETH_HDR;
 
-    char *srcIP;
-    char *dstIP;
-
     struct ip* ipHdr = (struct ip*)packetIP;
-    srcIP = inet_ntoa(ipHdr->ip_src);
-    dstIP = inet_ntoa(ipHdr->ip_dst);
+    flow.srcIP = ipHdr->ip_src;
+    flow.dstIP = ipHdr->ip_dst;
+    flow.tos = ipHdr->ip_tos;
     
     if(type == 0x0800){ //ipv4
         struct iphdr *ipHeader = (struct iphdr*)packetIP;
+        flow.prot = ipHeader->protocol;
 
         switch (ipHeader->protocol) {
             // ICMP
             case 1:
-                icmp_v4(srcIP, dstIP);
+                icmp_v4(flow);
                 break;
 
             // TCP + UDP
