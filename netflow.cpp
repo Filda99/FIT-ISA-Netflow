@@ -99,10 +99,8 @@ map< tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t>, flow_record >flow_m
  ************************************/
 void parse_arguments(int argc, char **argv);
 void icmp_v4(flow_record flow);
-void udp_v4(string srcIP, string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
-              string currentTime);
-void tcp_v4(string srcIP, string dstIP, const u_char *transportProtocolHdr, bpf_u_int32 lengthOfPacket,
-              string currentTime);
+void udp_v4(flow_record flow, const u_char *transportProtocolHdr);
+void tcp_v4(flow_record flow, const u_char *transportProtocolHdr);
 void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet);
 
 
@@ -171,8 +169,6 @@ void icmp_v4(flow_record flow)
     // srcIP, dstIP, srcPort, dstPort, protocol
     tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP.s_addr, flow.dstIP.s_addr, 0u, 0u, flow.prot);
     flow_map[keys] = flow;
-    
-    
 }
 
 /**
@@ -189,11 +185,11 @@ void icmp_v4(flow_record flow)
 void udp_v4(flow_record flow, const u_char *transportProtocolHdr)
 {
     struct udphdr *udpHdr = (struct udphdr *) transportProtocolHdr; // udp struktura
-    uint16_t srcPort = ntohs(udpHdr->uh_sport);
-    uint16_t dstPort = ntohs(udpHdr->uh_dport);
+    flow.srcPort = ntohs(udpHdr->uh_sport);
+    flow.dstPort = ntohs(udpHdr->uh_dport);
 
     // srcIP, dstIP, srcPort, dstPort, protocol
-    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP.s_addr, flow.dstIP.s_addr, srcPort, dstPort, flow.prot);
+    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP.s_addr, flow.dstIP.s_addr, flow.srcPort, flow.dstPort, flow.prot);
 }
 
 /**
@@ -210,11 +206,11 @@ void udp_v4(flow_record flow, const u_char *transportProtocolHdr)
 void tcp_v4(flow_record flow, const u_char *transportProtocolHdr)
 {
     struct tcphdr* tcpHdr = (struct tcphdr*)transportProtocolHdr; // udp struktura
-    uint16_t srcPort = ntohs(tcpHdr->th_sport);
-    uint16_t dstPort = ntohs(tcpHdr->th_dport);
+    flow.srcPort = ntohs(tcpHdr->th_sport);
+    flow.dstPort = ntohs(tcpHdr->th_dport);
 
     // srcIP, dstIP, srcPort, dstPort, protocol
-    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP.s_addr, flow.dstIP.s_addr, srcPort, dstPort, flow.prot);
+    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP.s_addr, flow.dstIP.s_addr, flow.srcPort, flow.dstPort, flow.prot);
 }
 
 /**
@@ -261,10 +257,10 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
                 unsigned int ipLen = ipHeader->ihl * 4;
                 const u_char *transportProtocolHdr = packet + ETH_HDR + ipLen;
 
-                // if(ipHeader->protocol == 17)
-                //     udp_v4(srcIP, dstIP, transportProtocolHdr, header->len, currentTime);
-                // else
-                //     tcp_v4(srcIP, dstIP, transportProtocolHdr, header->len, currentTime);
+                if(ipHeader->protocol == 17)
+                    udp_v4(flow, transportProtocolHdr);
+                else
+                    tcp_v4(flow, transportProtocolHdr);
                 break;
             }
 
