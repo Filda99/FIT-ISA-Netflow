@@ -58,26 +58,26 @@ using namespace std;
  ************************************/
 
 struct flow_record {
-    struct in_addr srcIP;
-    struct in_addr dstIP;
-    char        nextHop[4] = "";
-    uint16_t    scrIf = 0;
-    uint16_t    dstIf = 0;
-    uint32_t    dPkts = 0;
-    uint32_t    dOctets = 0;
-    uint32_t    first = 0;
-    uint32_t    last = 0;
-    uint16_t    srcPort = 0;
-    uint16_t    dstPort = 0;
-    uint8_t     pad1 = 0;
-    uint8_t     flgs = 0;
-    uint8_t     prot = 0;
-    uint8_t     tos = 0;
-    uint16_t    srcAs = 0;
-    uint16_t    dstAs = 0;
-    uint8_t     srcMask = 32;
-    uint8_t     dstMask = 32;
-    uint16_t    pad2 = 0;    
+    uint32_t srcIP;         // Source IP address 
+    uint32_t dstIP;         // Destination IP address 
+    uint32_t nextHop;       // IP address of next hop router 
+    uint16_t scrIf = 0;     // SNMP index of input interface 
+    uint16_t dstIf = 0;     // SNMP index of output interface 
+    uint32_t dPkts = 0;     // Packets in the flow 
+    uint32_t dOctets = 0;   // Total number of Layer 3 bytes in the packets of the flow 
+    uint32_t first = 0;     // SysUptime at start of flow 
+    uint32_t last = 0;      // SysUptime at the time the last packet of the flow was received 
+    uint16_t srcPort = 0;   // TCP/UDP source port number or equivalent 
+    uint16_t dstPort = 0;   // TCP/UDP destination port number or equivalent 
+    uint8_t  pad1 = 0;      // Unused (zero) bytes 
+    uint8_t  flgs = 0;      // Cumulative OR of TCP flags 
+    uint8_t  prot = 0;      // IP protocol type
+    uint8_t  tos = 0;       // IP type of service (ToS) 
+    uint16_t srcAs = 0;     // Autonomous system number of the source, either origin or peer
+    uint16_t dstAs = 0;     // Autonomous system number of the destination, either origin or peer 
+    uint8_t  srcMask = 32;  // Source address prefix mask bits 
+    uint8_t  dstMask = 32;  // Destination address prefix mask bits 
+    uint16_t pad2 = 0;      // Unused (zero) bytes 
 };
 
 /************************************
@@ -167,7 +167,7 @@ void parse_arguments(int argc, char **argv)
 void icmp_v4(flow_record flow)
 {
     // srcIP, dstIP, srcPort, dstPort, protocol
-    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP.s_addr, flow.dstIP.s_addr, 0u, 0u, flow.prot);
+    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP, flow.dstIP, 0u, 0u, flow.prot);
     flow_map[keys] = flow;
 }
 
@@ -189,7 +189,7 @@ void udp_v4(flow_record flow, const u_char *transportProtocolHdr)
     flow.dstPort = ntohs(udpHdr->uh_dport);
 
     // srcIP, dstIP, srcPort, dstPort, protocol
-    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP.s_addr, flow.dstIP.s_addr, flow.srcPort, flow.dstPort, flow.prot);
+    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP, flow.dstIP, flow.srcPort, flow.dstPort, flow.prot);
 }
 
 /**
@@ -208,9 +208,10 @@ void tcp_v4(flow_record flow, const u_char *transportProtocolHdr)
     struct tcphdr* tcpHdr = (struct tcphdr*)transportProtocolHdr; // udp struktura
     flow.srcPort = ntohs(tcpHdr->th_sport);
     flow.dstPort = ntohs(tcpHdr->th_dport);
+    flow.flgs = tcpHdr->th_flags; 
 
     // srcIP, dstIP, srcPort, dstPort, protocol
-    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP.s_addr, flow.dstIP.s_addr, flow.srcPort, flow.dstPort, flow.prot);
+    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP, flow.dstIP, flow.srcPort, flow.dstPort, flow.prot);
 }
 
 /**
@@ -223,28 +224,25 @@ void tcp_v4(flow_record flow, const u_char *transportProtocolHdr)
  */
 void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
 {
+    cout << "TIme: " << header->ts.tv_sec << "\n";
     flow_record flow;
 
-    // https://unix.superglobalmegacorp.com/Net2/newsrc/netinet/if_ether.h.html
     struct ether_header *ipvNum = (struct ether_header*)packet;
     u_short type = ntohs(ipvNum->ether_type);
-    // Aktualni cas prijeti paketu
-    // TODO: add time from packet header
-    string currentTime = "";
 
     // Posunuti se v paketu o ethernetovou hlavicku
     const u_char *packetIP = packet + ETH_HDR;
+    struct ip *ipHeader = (struct ip*)packetIP;
 
-    struct ip* ipHdr = (struct ip*)packetIP;
-    flow.srcIP = ipHdr->ip_src;
-    flow.dstIP = ipHdr->ip_dst;
-    flow.tos = ipHdr->ip_tos;
-    
+
     if(type == 0x0800){ //ipv4
-        struct iphdr *ipHeader = (struct iphdr*)packetIP;
-        flow.prot = ipHeader->protocol;
+        flow.prot = ipHeader->ip_p;
+        flow.tos = ipHeader->ip_tos;
+        flow.srcIP = ipHeader->ip_src.s_addr;
+        flow.dstIP = ipHeader->ip_dst.s_addr;
+        flow.dOctets = ipHeader->ip_len - ETH_HDR;
 
-        switch (ipHeader->protocol) {
+        switch (ipHeader->ip_p) {
             // ICMP
             case 1:
                 icmp_v4(flow);
@@ -254,10 +252,10 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
             case 6:
             case 17:{ // V zavorkach kvuli deklarovani promenne
                 // Promenliva delka hlavicky
-                unsigned int ipLen = ipHeader->ihl * 4;
+                unsigned int ipLen = ipHeader->ip_hl * 4;
                 const u_char *transportProtocolHdr = packet + ETH_HDR + ipLen;
 
-                if(ipHeader->protocol == 17)
+                if(ipHeader->ip_p == 17)
                     udp_v4(flow, transportProtocolHdr);
                 else
                     tcp_v4(flow, transportProtocolHdr);
