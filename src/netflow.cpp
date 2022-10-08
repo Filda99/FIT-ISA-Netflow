@@ -12,10 +12,10 @@
  * vytvoří záznamy NetFlow, které odešle na kolektor.
  * *******************************************************************************************************************
  * Spuštění:
- * ./flow [-f <file>] [-c <netflow_collector>[:<port>]] [-a <active_timer>] [-i <inactive_timer>] [-m <count>]
+ * ./flow [-f <file>] [-c <netflow_collector_>[:<port>]] [-a <active_timer_>] [-i <inactive_timer_>] [-m <count>]
  *      - f <file> - jméno analyzovaného souboru nebo STDIN
  *      - c <neflow_collector:port> - IP adresa, nebo hostname NetFlow kolektoru. Volitelně i UDP port
- *      - a <active_timer> - interval v sekundách, po kterém se exportují aktivní záznamy na kolektor
+ *      - a <active_timer_> - interval v sekundách, po kterém se exportují aktivní záznamy na kolektor
  *      - i <seconds> - interval v sekundách, po jehož vypršení se exportují neaktivní záznamy na kolektor
  *      - m <count> - velikost flow-cache. Při dosažení max. velikosti dojde k exportu nejstaršího záznamu v cachi na kolektor
  * 
@@ -87,12 +87,13 @@ struct flow_record {
 /************************************
  * GLOBAL VARIABLES
  ************************************/
-string pcapFile_name = "-";
-string netflow_collector = "127.0.0.1:2055";
-int active_timer = 60;
-int inactive_timer = 10;
-int flowcache_size = 1024;
-map< tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t>, flow_record >flow_map;
+string pcapFile_name_ = "-";
+string netflow_collector_ = "127.0.0.1:2055";
+int active_timer_ = 60;
+int inactive_timer_ = 10;
+int flowcache_size_ = 1024;
+map< tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t>, flow_record >flow_map_;
+struct timeval time_now_;
 
 /************************************
  * STATIC FUNCTION PROTOTYPES
@@ -121,29 +122,29 @@ void parse_arguments(int argc, char **argv)
         switch (c)
         {
             case 'f':
-                pcapFile_name = optarg;
+                pcapFile_name_ = optarg;
                 break;
 
             case 'c':
-                netflow_collector = optarg;
+                netflow_collector_ = optarg;
                 break;
 
             case 'a':
-                if ((active_timer = atoi(optarg)) == 0){
+                if ((active_timer_ = atoi(optarg)) == 0){
                     fprintf(stderr, "[ERR]: Parametru -a lze priradit pouze int.\n");
                     exit(3);
                 }
                 break;
 
             case 'i':
-                if ((inactive_timer = atoi(optarg)) == 0){
+                if ((inactive_timer_ = atoi(optarg)) == 0){
                     fprintf(stderr, "[ERR]: Parametru -i lze priradit pouze int.\n");
                     exit(3);
                 }
                 break;
 
             case 'm':
-                if ((flowcache_size = atoi(optarg)) == 0){
+                if ((flowcache_size_ = atoi(optarg)) == 0){
                     fprintf(stderr, "[ERR]: Parametru -m lze priradit pouze int.\n");
                     exit(3);
                 }
@@ -155,6 +156,18 @@ void parse_arguments(int argc, char **argv)
     }
 }
 
+void check_timers()
+{
+    for (auto itr = flow_map_.begin(); itr != flow_map_.end(); itr++)
+    {
+        
+    }
+}
+
+void update_flow_record(flow_record existingRecord, flow_record newRecord)
+{
+
+}
 
 /**
  * Zpracovani a vypsani protokolu icmp pro ipv4.
@@ -167,8 +180,18 @@ void parse_arguments(int argc, char **argv)
 void icmp_v4(flow_record flow)
 {
     // srcIP, dstIP, srcPort, dstPort, protocol
-    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP, flow.dstIP, 0u, 0u, flow.prot);
-    flow_map[keys] = flow;
+    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> key = make_tuple(flow.srcIP, flow.dstIP, flow.srcPort, flow.dstPort, flow.prot);
+    flow_map_[key] = flow;
+    check_timers();
+    // TODO: find in a map -> flow_map_[keys] = flow;
+    // TODO: print first arg in tuple -> cout << get<0>(key);
+    if(flow_map_.find(key)!= flow_map_.end()){
+
+
+        flow_record existingRecord = flow_map_[key];
+
+    }
+
 }
 
 /**
@@ -224,7 +247,6 @@ void tcp_v4(flow_record flow, const u_char *transportProtocolHdr)
  */
 void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
 {
-    cout << "TIme: " << header->ts.tv_sec << "\n";
     flow_record flow;
 
     struct ether_header *ipvNum = (struct ether_header*)packet;
@@ -240,7 +262,7 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
         flow.tos = ipHeader->ip_tos;
         flow.srcIP = ipHeader->ip_src.s_addr;
         flow.dstIP = ipHeader->ip_dst.s_addr;
-        flow.dOctets = ipHeader->ip_len - ETH_HDR;
+        flow.first = header->ts.tv_usec;
 
         switch (ipHeader->ip_p) {
             // ICMP
@@ -252,8 +274,8 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
             case 6:
             case 17:{ // V zavorkach kvuli deklarovani promenne
                 // Promenliva delka hlavicky
-                unsigned int ipLen = ipHeader->ip_hl * 4;
-                const u_char *transportProtocolHdr = packet + ETH_HDR + ipLen;
+                flow.dOctets = ipHeader->ip_hl * 4;
+                const u_char *transportProtocolHdr = packet + ETH_HDR + flow.dOctets;
 
                 if(ipHeader->ip_p == 17)
                     udp_v4(flow, transportProtocolHdr);
@@ -296,9 +318,9 @@ int main (int argc, char **argv)
     char errbuf[PCAP_ERRBUF_SIZE];
 
     // Otevreni zarizeni pro sledovani paketu
-    handle = pcap_open_offline(pcapFile_name.c_str(), errbuf);
+    handle = pcap_open_offline(pcapFile_name_.c_str(), errbuf);
     if (handle == NULL) {
-        fprintf(stderr, "[ERR]: Nepodařilo se mi otevřít soubor %s, %s\n",pcapFile_name.c_str(), errbuf);
+        fprintf(stderr, "[ERR]: Nepodařilo se mi otevřít soubor %s, %s\n",pcapFile_name_.c_str(), errbuf);
         return(2);
     }
 
