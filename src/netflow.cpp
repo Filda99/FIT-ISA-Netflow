@@ -56,6 +56,17 @@ using namespace std;
 /************************************
  * PRIVATE TYPEDEFS
  ************************************/
+struct flow_header {
+    uint16_t version = 5;       // NetFlow export format version number NetFlow export format version number 
+    uint16_t count = 0;         // Number of flows exported in this packet (1-30) 
+    uint16_t SysUpTime = 0;     // Current time in milliseconds since the export device booted 
+    uint32_t unix_secs = 0;     // Current count of seconds since 0000 UTC 1970 
+    uint32_t unix_nsecs = 0;    // Current count of nanoseconds since 0000 UTC 1970 
+    uint32_t flow_sequence = 0; // Sequence counter of total flows seen 
+    uint8_t  engine_type = 0;   // Type of flow-switching engine 
+    uint8_t  engine_id = 0;     // Slot number of the flow-switching engine 
+    uint16_t sampling_interval = 0; // First two bits hold the sampling mode; remaining 14 bits hold value of sampling interval
+} flow_header_;
 
 struct flow_record {
     uint32_t srcIP;         // Source IP address 
@@ -80,9 +91,6 @@ struct flow_record {
     uint16_t pad2 = 0;      // Unused (zero) bytes 
 };
 
-/************************************
- * STATIC VARIABLES
- ************************************/
 
 /************************************
  * GLOBAL VARIABLES
@@ -94,6 +102,7 @@ int inactive_timer_ = 10;
 int flowcache_size_ = 1024;
 map< tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t>, flow_record >flow_map_;
 struct timeval time_now_;
+
 
 /************************************
  * STATIC FUNCTION PROTOTYPES
@@ -262,7 +271,8 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
         flow.tos = ipHeader->ip_tos;
         flow.srcIP = ipHeader->ip_src.s_addr;
         flow.dstIP = ipHeader->ip_dst.s_addr;
-        flow.first = header->ts.tv_usec;
+        flow.first = header->ts.tv_sec;
+        cout << flow.first << endl;
 
         switch (ipHeader->ip_p) {
             // ICMP
@@ -335,8 +345,3 @@ int main (int argc, char **argv)
 
     return(0);
 }
-
-
-/************************************
- * GLOBAL FUNCTIONS
- ************************************/
