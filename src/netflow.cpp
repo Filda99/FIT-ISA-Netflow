@@ -43,6 +43,8 @@
 #include <map>
 #include <tuple>
 #include <algorithm>
+#include <vector>
+
 
 using namespace std;
 /************************************
@@ -105,9 +107,9 @@ string netflow_collector_ = "127.0.0.1:2055";
 int active_timer_ = 60;
 int inactive_timer_ = 10;
 int flowcache_size_ = 1024;
-map< tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t>, flow_record >flow_map_;
+map< tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t>, flow >flow_map_;
 uint32_t time_now_;
-
+vector<flow> sending_packets_;
 
 /************************************
  * STATIC FUNCTION PROTOTYPES
@@ -170,22 +172,31 @@ void parse_arguments(int argc, char **argv)
     }
 }
 
-bool compareByTimes(const flow &a, const flow &b)
+bool compare_by_times(const flow &a, const flow &b)
 {
     return a.header.SysUpTime < b.header.SysUpTime;
 }
 
+void send_packets()
+{
+    sort(sending_packets_.begin(), sending_packets_.end(), compare_by_times);
+    // TODO: send packets
+}
+
 void check_timers()
 {
-
     for (auto itr = flow_map_.begin(); itr != flow_map_.end(); itr++)
     {
-        uint32_t exportTime;
         // Active
-        uint32_t atimer = time_now_ - itr->second.first;
+        uint32_t atimer = time_now_ - itr->second.body.first;
 
         // Inactive
-        uint32_t itimer = time_now_ - itr->second.last;
+        uint32_t itimer = time_now_ - itr->second.body.last;
+
+        if (atimer < active_timer_ && itimer < inactive_timer_)
+        {
+            continue;
+        }
 
         // Both timer run out
         if (atimer > active_timer_ && itimer > inactive_timer_)
@@ -195,23 +206,29 @@ void check_timers()
             itimer = itimer - inactive_timer_;
             if (atimer > itimer)
             {
-                exportTime = atimer;
+                //uint32_t overlappingTime = time_now_ % itr->second.body.last;
+                itr->second.header.SysUpTime = itr->second.body.first + atimer;
             }
             else
             {
-                exportTime = itimer;
+                itr->second.header.SysUpTime = itr->second.body.last + itimer;
             }
         }
         // Active timer run out
         else if (atimer > active_timer_)
         {
-            exportTime = atimer;
+            itr->second.header.SysUpTime = itr->second.body.first + atimer;
         }
         // Inactive timer run out
         else if (itimer > inactive_timer_)
         {
-            exportTime = itimer;
+            itr->second.header.SysUpTime = itr->second.body.last + itimer;
         }
+        sending_packets_.push_back(itr->second);
+    }
+    if(!sending_packets_.empty())
+    {
+        send_packets();
     }
 }
 
@@ -232,14 +249,14 @@ void icmp_v4(flow flow)
 {
     // srcIP, dstIP, srcPort, dstPort, protocol
     tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> key = make_tuple(flow.body.srcIP, flow.body.dstIP, flow.body.srcPort, flow.body.dstPort, flow.body.prot);
-    flow_map_[key] = flow.body;
+    flow_map_[key] = flow;
     check_timers();
     // TODO: find in a map -> flow_map_[keys] = flow;
     // TODO: print first arg in tuple -> cout << get<0>(key);
     if(flow_map_.find(key)!= flow_map_.end()){
 
 
-        flow_record existingRecord = flow_map_[key];
+        struct flow existingRecord = flow_map_[key];
 
     }
 
