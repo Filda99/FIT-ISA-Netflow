@@ -42,6 +42,7 @@
 #include <netinet/ip.h>         //ip hlavicka
 #include <map>
 #include <tuple>
+#include <algorithm>
 
 using namespace std;
 /************************************
@@ -66,7 +67,7 @@ struct flow_header {
     uint8_t  engine_type = 0;   // Type of flow-switching engine 
     uint8_t  engine_id = 0;     // Slot number of the flow-switching engine 
     uint16_t sampling_interval = 0; // First two bits hold the sampling mode; remaining 14 bits hold value of sampling interval
-} flow_header_;
+};
 
 struct flow_record {
     uint32_t srcIP;         // Source IP address 
@@ -91,6 +92,10 @@ struct flow_record {
     uint16_t pad2 = 0;      // Unused (zero) bytes 
 };
 
+struct flow {
+   flow_header header;
+   flow_record body; 
+};
 
 /************************************
  * GLOBAL VARIABLES
@@ -101,16 +106,16 @@ int active_timer_ = 60;
 int inactive_timer_ = 10;
 int flowcache_size_ = 1024;
 map< tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t>, flow_record >flow_map_;
-struct timeval time_now_;
+uint32_t time_now_;
 
 
 /************************************
  * STATIC FUNCTION PROTOTYPES
  ************************************/
 void parse_arguments(int argc, char **argv);
-void icmp_v4(flow_record flow);
-void udp_v4(flow_record flow, const u_char *transportProtocolHdr);
-void tcp_v4(flow_record flow, const u_char *transportProtocolHdr);
+void icmp_v4(flow flow);
+void udp_v4(flow flow, const u_char *transportProtocolHdr);
+void tcp_v4(flow flow, const u_char *transportProtocolHdr);
 void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet);
 
 
@@ -165,11 +170,48 @@ void parse_arguments(int argc, char **argv)
     }
 }
 
+bool compareByTimes(const flow &a, const flow &b)
+{
+    return a.header.SysUpTime < b.header.SysUpTime;
+}
+
 void check_timers()
 {
+
     for (auto itr = flow_map_.begin(); itr != flow_map_.end(); itr++)
     {
-        
+        uint32_t exportTime;
+        // Active
+        uint32_t atimer = time_now_ - itr->second.first;
+
+        // Inactive
+        uint32_t itimer = time_now_ - itr->second.last;
+
+        // Both timer run out
+        if (atimer > active_timer_ && itimer > inactive_timer_)
+        {
+            // We need to select, which one is older
+            atimer = atimer - active_timer_;
+            itimer = itimer - inactive_timer_;
+            if (atimer > itimer)
+            {
+                exportTime = atimer;
+            }
+            else
+            {
+                exportTime = itimer;
+            }
+        }
+        // Active timer run out
+        else if (atimer > active_timer_)
+        {
+            exportTime = atimer;
+        }
+        // Inactive timer run out
+        else if (itimer > inactive_timer_)
+        {
+            exportTime = itimer;
+        }
     }
 }
 
@@ -186,11 +228,11 @@ void update_flow_record(flow_record existingRecord, flow_record newRecord)
  * @param lengthOfPacket Delka paketu
  * @param currentTime Cas obdrzeni paketu
  */
-void icmp_v4(flow_record flow)
+void icmp_v4(flow flow)
 {
     // srcIP, dstIP, srcPort, dstPort, protocol
-    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> key = make_tuple(flow.srcIP, flow.dstIP, flow.srcPort, flow.dstPort, flow.prot);
-    flow_map_[key] = flow;
+    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> key = make_tuple(flow.body.srcIP, flow.body.dstIP, flow.body.srcPort, flow.body.dstPort, flow.body.prot);
+    flow_map_[key] = flow.body;
     check_timers();
     // TODO: find in a map -> flow_map_[keys] = flow;
     // TODO: print first arg in tuple -> cout << get<0>(key);
@@ -214,14 +256,14 @@ void icmp_v4(flow_record flow)
  * @param currentTime Cas obdrzeni paketu
  * @param ipLen Delka hlavicky, o kterou se mame posunout pro ziskani portu
  */
-void udp_v4(flow_record flow, const u_char *transportProtocolHdr)
+void udp_v4(flow flow, const u_char *transportProtocolHdr)
 {
     struct udphdr *udpHdr = (struct udphdr *) transportProtocolHdr; // udp struktura
-    flow.srcPort = ntohs(udpHdr->uh_sport);
-    flow.dstPort = ntohs(udpHdr->uh_dport);
+    flow.body.srcPort = ntohs(udpHdr->uh_sport);
+    flow.body.dstPort = ntohs(udpHdr->uh_dport);
 
     // srcIP, dstIP, srcPort, dstPort, protocol
-    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP, flow.dstIP, flow.srcPort, flow.dstPort, flow.prot);
+    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.body.srcIP, flow.body.dstIP, flow.body.srcPort, flow.body.dstPort, flow.body.prot);
 }
 
 /**
@@ -235,15 +277,15 @@ void udp_v4(flow_record flow, const u_char *transportProtocolHdr)
  * @param currentTime Cas obdrzeni paketu
  * @param ipLen Delka hlavicky, o kterou se mame posunout pro ziskani portu
  */
-void tcp_v4(flow_record flow, const u_char *transportProtocolHdr)
+void tcp_v4(flow flow, const u_char *transportProtocolHdr)
 {
     struct tcphdr* tcpHdr = (struct tcphdr*)transportProtocolHdr; // udp struktura
-    flow.srcPort = ntohs(tcpHdr->th_sport);
-    flow.dstPort = ntohs(tcpHdr->th_dport);
-    flow.flgs = tcpHdr->th_flags; 
+    flow.body.srcPort = ntohs(tcpHdr->th_sport);
+    flow.body.dstPort = ntohs(tcpHdr->th_dport);
+    flow.body.flgs = tcpHdr->th_flags; 
 
     // srcIP, dstIP, srcPort, dstPort, protocol
-    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.srcIP, flow.dstIP, flow.srcPort, flow.dstPort, flow.prot);
+    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.body.srcIP, flow.body.dstIP, flow.body.srcPort, flow.body.dstPort, flow.body.prot);
 }
 
 /**
@@ -256,7 +298,7 @@ void tcp_v4(flow_record flow, const u_char *transportProtocolHdr)
  */
 void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
 {
-    flow_record flow;
+    flow flow;
 
     struct ether_header *ipvNum = (struct ether_header*)packet;
     u_short type = ntohs(ipvNum->ether_type);
@@ -267,12 +309,12 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
 
 
     if(type == 0x0800){ //ipv4
-        flow.prot = ipHeader->ip_p;
-        flow.tos = ipHeader->ip_tos;
-        flow.srcIP = ipHeader->ip_src.s_addr;
-        flow.dstIP = ipHeader->ip_dst.s_addr;
-        flow.first = header->ts.tv_sec;
-        cout << flow.first << endl;
+        flow.body.prot = ipHeader->ip_p;
+        flow.body.tos = ipHeader->ip_tos;
+        flow.body.srcIP = ipHeader->ip_src.s_addr;
+        flow.body.dstIP = ipHeader->ip_dst.s_addr;
+        flow.body.first = header->ts.tv_sec * 1000;
+        flow.body.first = flow.header.SysUpTime - flow.body.first;
 
         switch (ipHeader->ip_p) {
             // ICMP
@@ -284,8 +326,8 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
             case 6:
             case 17:{ // V zavorkach kvuli deklarovani promenne
                 // Promenliva delka hlavicky
-                flow.dOctets = ipHeader->ip_hl * 4;
-                const u_char *transportProtocolHdr = packet + ETH_HDR + flow.dOctets;
+                flow.body.dOctets = ipHeader->ip_hl * 4;
+                const u_char *transportProtocolHdr = packet + ETH_HDR + flow.body.dOctets;
 
                 if(ipHeader->ip_p == 17)
                     udp_v4(flow, transportProtocolHdr);
