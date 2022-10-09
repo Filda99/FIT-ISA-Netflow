@@ -124,6 +124,10 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
 /************************************
  * STATIC FUNCTIONS
  ************************************/
+
+/************************************
+ * Arguments
+ ************************************/
 /**
  * Parsovani argumentu.
  * Argumenty mohou byt zadany nasledovne:
@@ -172,21 +176,29 @@ void parse_arguments(int argc, char **argv)
     }
 }
 
-bool compare_by_times(const flow &a, const flow &b)
+
+tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> create_key(flow flow)
 {
-    return a.header.SysUpTime < b.header.SysUpTime;
+    // srcIP, dstIP, srcPort, dstPort, protocol
+    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> key = 
+        make_tuple(flow.body.srcIP, flow.body.dstIP, flow.body.srcPort, flow.body.dstPort, flow.body.prot);
+    return key;
 }
 
-void send_packets()
+/************************************
+ * Helping
+ ************************************/
+bool compare_by_times(const flow &a, const flow &b)
 {
-    sort(sending_packets_.begin(), sending_packets_.end(), compare_by_times);
-    // TODO: send packets
+    return a.header.SysUpTime > b.header.SysUpTime;
 }
 
 void check_timers()
 {
+    cout << "Flow map has these items:" << endl;
     for (auto itr = flow_map_.begin(); itr != flow_map_.end(); itr++)
     {
+        cout << " - " << itr->second.body.srcIP << endl;
         // Active
         uint32_t atimer = time_now_ - itr->second.body.first;
 
@@ -228,15 +240,45 @@ void check_timers()
     }
     if(!sending_packets_.empty())
     {
-        send_packets();
+        send_flows();
     }
 }
+
+
+/************************************
+ * Flows
+ ************************************/
+void send_flows()
+{
+    sort(sending_packets_.begin(), sending_packets_.end(), compare_by_times);
+
+    while (!sending_packets_.empty())
+    {
+        flow packet = sending_packets_.back();
+        tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> key = 
+            make_tuple(packet.body.srcIP, packet.body.dstIP, packet.body.srcPort, packet.body.dstPort, packet.body.prot);
+            
+        flow_map_.erase(key);
+        sending_packets_.pop_back();
+
+        cout << "Sending packet: ";
+        cout << packet.body.srcIP << endl;
+    }
+
+    cout << "..." << endl;
+    // TODO: send packets
+}
+
 
 void update_flow_record(flow_record existingRecord, flow_record newRecord)
 {
 
 }
 
+
+/************************************
+ * Packets
+ ************************************/
 /**
  * Zpracovani a vypsani protokolu icmp pro ipv4.
  * Ze zacatku pretypovani paketu na ip strukturu, ziskani ip adres, vypsani.
@@ -247,20 +289,22 @@ void update_flow_record(flow_record existingRecord, flow_record newRecord)
  */
 void icmp_v4(flow flow)
 {
-    // srcIP, dstIP, srcPort, dstPort, protocol
-    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> key = make_tuple(flow.body.srcIP, flow.body.dstIP, flow.body.srcPort, flow.body.dstPort, flow.body.prot);
-    flow_map_[key] = flow;
+    auto key = create_key(flow);
+    
     check_timers();
+
     // TODO: find in a map -> flow_map_[keys] = flow;
     // TODO: print first arg in tuple -> cout << get<0>(key);
     if(flow_map_.find(key)!= flow_map_.end()){
-
-
         struct flow existingRecord = flow_map_[key];
-
+        cout << "Existint item found! " << existingRecord.body.srcIP << endl;
     }
-
+    else{
+        flow_map_[key] = flow;
+        cout << "Adding new item: " << flow.body.srcIP << endl;
+    }
 }
+
 
 /**
  * Zpracovani a vypsani protokolu udp pro ipv4.
@@ -279,9 +323,9 @@ void udp_v4(flow flow, const u_char *transportProtocolHdr)
     flow.body.srcPort = ntohs(udpHdr->uh_sport);
     flow.body.dstPort = ntohs(udpHdr->uh_dport);
 
-    // srcIP, dstIP, srcPort, dstPort, protocol
-    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.body.srcIP, flow.body.dstIP, flow.body.srcPort, flow.body.dstPort, flow.body.prot);
+    auto key = create_key(flow);
 }
+
 
 /**
  * Zpracovani a vypsani protokolu tcp pro ipv4.
@@ -301,9 +345,9 @@ void tcp_v4(flow flow, const u_char *transportProtocolHdr)
     flow.body.dstPort = ntohs(tcpHdr->th_dport);
     flow.body.flgs = tcpHdr->th_flags; 
 
-    // srcIP, dstIP, srcPort, dstPort, protocol
-    tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> keys = make_tuple(flow.body.srcIP, flow.body.dstIP, flow.body.srcPort, flow.body.dstPort, flow.body.prot);
+    auto key = create_key(flow);
 }
+
 
 /**
  * Hlavni funkce, vola se vzdy pri prijeti paketu.
@@ -359,6 +403,7 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
     }
 }
 
+
 int pcap_set_filter(pcap_t *handle)
 {
     string filterStr = "(tcp or udp or icmp)";
@@ -375,6 +420,7 @@ int pcap_set_filter(pcap_t *handle)
     }
     return 1;
 }
+
 
 int main (int argc, char **argv)
 {
