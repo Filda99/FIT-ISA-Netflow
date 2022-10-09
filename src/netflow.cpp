@@ -44,6 +44,7 @@
 #include <tuple>
 #include <algorithm>
 #include <vector>
+#include<ctime>
 
 
 using namespace std;
@@ -115,6 +116,12 @@ vector<flow> sending_packets_;
  * STATIC FUNCTION PROTOTYPES
  ************************************/
 void parse_arguments(int argc, char **argv);
+tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> create_key(flow flow);
+bool compare_by_times(const flow &a, const flow &b);
+void check_timers();
+void send_flows();
+void update_flow_record(flow existingRecord, flow newRecord);
+
 void icmp_v4(flow flow);
 void udp_v4(flow flow, const u_char *transportProtocolHdr);
 void tcp_v4(flow flow, const u_char *transportProtocolHdr);
@@ -270,9 +277,11 @@ void send_flows()
 }
 
 
-void update_flow_record(flow_record existingRecord, flow_record newRecord)
+void update_flow_record(flow existingRecord, flow newRecord)
 {
-
+    existingRecord.body.dOctets += newRecord.body.dOctets;
+    existingRecord.body.dPkts++;
+    existingRecord.body.last = newRecord.body.first;
 }
 
 
@@ -298,6 +307,7 @@ void icmp_v4(flow flow)
     if(flow_map_.find(key)!= flow_map_.end()){
         struct flow existingRecord = flow_map_[key];
         cout << "Existint item found! " << existingRecord.body.srcIP << endl;
+        update_flow_record(existingRecord, flow);
     }
     else{
         flow_map_[key] = flow;
@@ -367,15 +377,25 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
     // Posunuti se v paketu o ethernetovou hlavicku
     const u_char *packetIP = packet + ETH_HDR;
     struct ip *ipHeader = (struct ip*)packetIP;
-
+    time_t rawtime = header->ts.tv_sec;
+    printf ("The packet time is: %s\n", ctime (&rawtime));
 
     if(type == 0x0800){ //ipv4
         flow.body.prot = ipHeader->ip_p;
         flow.body.tos = ipHeader->ip_tos;
         flow.body.srcIP = ipHeader->ip_src.s_addr;
         flow.body.dstIP = ipHeader->ip_dst.s_addr;
-        flow.body.first = header->ts.tv_sec * 1000;
-        flow.body.first = flow.header.SysUpTime - flow.body.first;
+        flow.body.first = header->ts.tv_sec;
+        // flow.body.first = flow.header.SysUpTime - flow.body.first;
+        time_t time = flow.body.first;
+        suseconds_t times = header->ts.tv_usec;
+        printf ("The packet seconds are: %s\n", ctime (&time));
+        printf ("The packet useconds are: %s\n", ctime (&times));
+
+        // time_t tmPacket = header->ts.tv_usec;
+        // struct tm t = *localtime(&tmPacket);;
+        // cout<<"Current Date: "<<t.tm_year+1900<<"-"<<t.tm_mon+1<<"-"<< t.tm_mday<< endl;
+        // cout<<"Current Time: "<<t.tm_hour<<":"<<t.tm_min<<":"<<t.tm_sec << endl;
 
         switch (ipHeader->ip_p) {
             // ICMP
