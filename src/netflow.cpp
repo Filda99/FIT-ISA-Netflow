@@ -202,6 +202,11 @@ bool compare_by_times(const flow &a, const flow &b)
 
 void check_timers()
 {
+    if (flow_map_.empty())
+    {
+        return;
+    }
+
     cout << "Flow map has these items:" << endl;
     for (auto itr = flow_map_.begin(); itr != flow_map_.end(); itr++)
     {
@@ -211,13 +216,16 @@ void check_timers()
 
         // Inactive
         uint32_t itimer = time_now_ - itr->second.body.last;
+        cout << " \t- " << "Time now: " << time_now_ << endl;
+        cout << " \t- " << "Atimer = " << atimer << " Active = " << active_timer_ << endl;
+        cout << " \t- " << "Itimer = " << itimer << " Inactive = " << inactive_timer_ << endl;
 
         if (atimer < active_timer_ && itimer < inactive_timer_)
         {
             continue;
         }
 
-        // Both timer run out
+        // Both timings have expired
         if (atimer > active_timer_ && itimer > inactive_timer_)
         {
             // We need to select, which one is older
@@ -225,7 +233,6 @@ void check_timers()
             itimer = itimer - inactive_timer_;
             if (atimer > itimer)
             {
-                //uint32_t overlappingTime = time_now_ % itr->second.body.last;
                 itr->second.header.SysUpTime = itr->second.body.first + atimer;
             }
             else
@@ -268,8 +275,8 @@ void send_flows()
         flow_map_.erase(key);
         sending_packets_.pop_back();
 
-        cout << "Sending packet: ";
-        cout << packet.body.srcIP << endl;
+        cout << "Sending packet: " << packet.body.srcIP << endl;
+        cout << "In time: " << time_now_ << endl; 
     }
 
     cout << "..." << endl;
@@ -281,7 +288,7 @@ void update_flow_record(flow existingRecord, flow newRecord)
 {
     existingRecord.body.dOctets += newRecord.body.dOctets;
     existingRecord.body.dPkts++;
-    existingRecord.body.last = newRecord.body.first;
+    existingRecord.body.last = time_now_;
 }
 
 
@@ -310,6 +317,8 @@ void icmp_v4(flow flow)
         update_flow_record(existingRecord, flow);
     }
     else{
+        flow.body.first = time_now_;
+        flow.body.last = time_now_;
         flow_map_[key] = flow;
         cout << "Adding new item: " << flow.body.srcIP << endl;
     }
@@ -377,22 +386,14 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
     // Posunuti se v paketu o ethernetovou hlavicku
     const u_char *packetIP = packet + ETH_HDR;
     struct ip *ipHeader = (struct ip*)packetIP;
-    time_t rawtime = header->ts.tv_sec;
-    printf ("The packet time is: %s\n", ctime (&rawtime));
 
     if(type == 0x0800){ //ipv4
+        time_now_ = header->ts.tv_sec;
         flow.body.prot = ipHeader->ip_p;
         flow.body.tos = ipHeader->ip_tos;
         flow.body.srcIP = ipHeader->ip_src.s_addr;
         flow.body.dstIP = ipHeader->ip_dst.s_addr;
-        flow.body.first = header->ts.tv_sec;
-        // flow.body.first = flow.header.SysUpTime - flow.body.first;
-        printf ("The packet seconds are: %s\n", ctime((const time_t*)&flow.body.first));
-
-        // time_t tmPacket = header->ts.tv_usec;
-        // struct tm t = *localtime(&tmPacket);;
-        // cout<<"Current Date: "<<t.tm_year+1900<<"-"<<t.tm_mon+1<<"-"<< t.tm_mday<< endl;
-        // cout<<"Current Time: "<<t.tm_hour<<":"<<t.tm_min<<":"<<t.tm_sec << endl;
+        // TODO: printf ("The packet seconds are: %s", ctime((const time_t*)&flow.body.first));
 
         switch (ipHeader->ip_p) {
             // ICMP
@@ -403,8 +404,8 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
             // TCP + UDP
             case 6:
             case 17:{ // V zavorkach kvuli deklarovani promenne
-                // Promenliva delka hlavicky
                 flow.body.dOctets = ipHeader->ip_hl * 4;
+                cout << flow.body.dOctets;
                 const u_char *transportProtocolHdr = packet + ETH_HDR + flow.body.dOctets;
 
                 if(ipHeader->ip_p == 17)
@@ -462,6 +463,11 @@ int main (int argc, char **argv)
     }
     
     pcap_loop(handle, 0, process_packet, NULL);
+
+    while(!flow_map_.empty()){
+        time_now_++;
+        check_timers();
+    }
 
     pcap_close(handle);
 
