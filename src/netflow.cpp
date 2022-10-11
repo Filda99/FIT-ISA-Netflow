@@ -387,10 +387,7 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
         flow.body.dstIP = ipHeader->ip_dst.s_addr;
         flow.body.first = header->ts.tv_sec;
         // flow.body.first = flow.header.SysUpTime - flow.body.first;
-        time_t time = flow.body.first;
-        suseconds_t times = header->ts.tv_usec;
-        printf ("The packet seconds are: %s\n", ctime (&time));
-        printf ("The packet useconds are: %s\n", ctime (&times));
+        printf ("The packet seconds are: %s\n", ctime((const time_t*)&flow.body.first));
 
         // time_t tmPacket = header->ts.tv_usec;
         // struct tm t = *localtime(&tmPacket);;
