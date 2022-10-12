@@ -120,7 +120,7 @@ tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> create_key(flow flow);
 bool compare_by_times(const flow &a, const flow &b);
 void check_timers();
 void send_flows();
-void update_flow_record(flow existingRecord, flow newRecord);
+void update_flow_record(flow *existingRecord, flow *newRecord);
 
 void icmp_v4(flow flow);
 void udp_v4(flow flow, const u_char *transportProtocolHdr);
@@ -210,15 +210,18 @@ void check_timers()
     cout << "Flow map has these items:" << endl;
     for (auto itr = flow_map_.begin(); itr != flow_map_.end(); itr++)
     {
-        cout << " - " << itr->second.body.srcIP << endl;
+        char str[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &(itr->second.body.srcIP), str, INET_ADDRSTRLEN);
+        cout << " - " << str << endl;
         // Active
         uint32_t atimer = time_now_ - itr->second.body.first;
 
         // Inactive
         uint32_t itimer = time_now_ - itr->second.body.last;
-        cout << " \t- " << "Time now: " << time_now_ << endl;
+
         cout << " \t- " << "Atimer = " << atimer << " Active = " << active_timer_ << endl;
         cout << " \t- " << "Itimer = " << itimer << " Inactive = " << inactive_timer_ << endl;
+        cout << " \t- " << "First = " << itr->second.body.first << " Last = " << itr->second.body.last << endl;
 
         if (atimer < active_timer_ && itimer < inactive_timer_)
         {
@@ -234,21 +237,25 @@ void check_timers()
             if (atimer > itimer)
             {
                 itr->second.header.SysUpTime = itr->second.body.first + atimer;
+                cout << " \t- " << "ATIMER" << endl;
             }
             else
             {
                 itr->second.header.SysUpTime = itr->second.body.last + itimer;
+                cout << " \t- " << "ITIMER" << endl;
             }
         }
         // Active timer run out
         else if (atimer > active_timer_)
         {
             itr->second.header.SysUpTime = itr->second.body.first + atimer;
+                cout << " \t- " << "ATIMER" << endl;
         }
         // Inactive timer run out
         else if (itimer > inactive_timer_)
         {
             itr->second.header.SysUpTime = itr->second.body.last + itimer;
+            cout << " \t- " << "ITIMER" << endl;
         }
         sending_packets_.push_back(itr->second);
     }
@@ -284,11 +291,11 @@ void send_flows()
 }
 
 
-void update_flow_record(flow existingRecord, flow newRecord)
+void update_flow_record(flow *existingRecord, flow *newRecord)
 {
-    existingRecord.body.dOctets += newRecord.body.dOctets;
-    existingRecord.body.dPkts++;
-    existingRecord.body.last = time_now_;
+    existingRecord->body.dOctets += newRecord->body.dOctets;
+    existingRecord->body.dPkts++;
+    existingRecord->body.last = time_now_;
 }
 
 
@@ -306,21 +313,29 @@ void update_flow_record(flow existingRecord, flow newRecord)
 void icmp_v4(flow flow)
 {
     auto key = create_key(flow);
+    cout << "-------------NEW PACKET-------------" << endl;
+    cout << "- " << "Time now: " << time_now_ << endl;
     
     check_timers();
 
     // TODO: find in a map -> flow_map_[keys] = flow;
     // TODO: print first arg in tuple -> cout << get<0>(key);
-    if(flow_map_.find(key)!= flow_map_.end()){
-        struct flow existingRecord = flow_map_[key];
-        cout << "Existint item found! " << existingRecord.body.srcIP << endl;
-        update_flow_record(existingRecord, flow);
+    auto it = flow_map_.find(key);
+    if (it != flow_map_.end())
+    {
+        char str[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &(flow.body.srcIP), str, INET_ADDRSTRLEN);
+        cout << "-> Existint item found! " << str << endl;
+        update_flow_record(&it->second, &flow);
     }
-    else{
+    else
+    {
         flow.body.first = time_now_;
         flow.body.last = time_now_;
         flow_map_[key] = flow;
-        cout << "Adding new item: " << flow.body.srcIP << endl;
+        char str[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &(flow.body.srcIP), str, INET_ADDRSTRLEN);
+        cout << "-> Adding new item: " << str << endl;
     }
 }
 
