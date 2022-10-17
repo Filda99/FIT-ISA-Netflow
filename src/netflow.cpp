@@ -44,6 +44,7 @@
 #include <algorithm>
 #include <vector>
 #include <ctime>
+#include "send_data.h"
 
 using namespace std;
 /************************************
@@ -518,6 +519,8 @@ int main(int argc, char **argv)
     pcap_t *handle;
     char errbuf[PCAP_ERRBUF_SIZE];
 
+    //TODO: create_connection(netflow_collector_, 0);
+
     // Otevreni zarizeni pro sledovani paketu
     handle = pcap_open_offline(pcapFile_name_.c_str(), errbuf);
     if (handle == NULL)
@@ -541,6 +544,8 @@ int main(int argc, char **argv)
     }
 
     pcap_close(handle);
+
+    //TODO: close_connection();
 
     return (0);
 }
