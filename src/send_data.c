@@ -22,7 +22,7 @@
 
 #define BUFFER 1024                // buffer length 
 
-int main(int argc , char *argv[])
+int send_data(char *address, char* port)
 {
   int sock;                        // socket descriptor
   int msg_size, i;
@@ -31,20 +31,17 @@ int main(int argc , char *argv[])
   socklen_t len, fromlen;        
   char buffer[BUFFER];            
 
-  if (argc != 3)                   // two parameters required
-    errx(1,"Usage: %s <address> <port>",argv[0]);
-  
   memset(&server,0,sizeof(server)); // erase the server structure
   server.sin_family = AF_INET;                   
 
   // make DNS resolution of the first parameter using gethostbyname()
-  if ((servent = gethostbyname(argv[1])) == NULL) // check the first parameter
+  if ((servent = gethostbyname(address)) == NULL) // check the first parameter
     errx(1,"gethostbyname() failed\n");
 
   // copy the first parameter to the server.sin_addr structure
   memcpy(&server.sin_addr,servent->h_addr,servent->h_length); 
 
-  server.sin_port = htons(atoi(argv[2]));        // server port (network byte order)
+  server.sin_port = htons(atoi(port));        // server port (network byte order)
    
   if ((sock = socket(AF_INET , SOCK_DGRAM , 0)) == -1)   //create a client socket
     err(1,"socket() failed\n");
