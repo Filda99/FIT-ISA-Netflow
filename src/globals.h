@@ -5,7 +5,7 @@
 struct flow_header
 {
     uint16_t version = 5;           // NetFlow export format version number NetFlow export format version number
-    uint16_t count = 0;             // Number of flows exported in this packet (1-30)
+    uint16_t count = 1;             // Number of flows exported in this packet (1-30)
     uint16_t SysUpTime = 0;         // Current time in milliseconds since the export device booted
     uint32_t unix_secs = 0;         // Current count of seconds since 0000 UTC 1970
     uint32_t unix_nsecs = 0;        // Current count of nanoseconds since 0000 UTC 1970

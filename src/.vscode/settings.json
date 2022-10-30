@@ -47,6 +47,7 @@
         "streambuf": "cpp",
         "cinttypes": "cpp",
         "typeinfo": "cpp",
-        "globals.h": "c"
+        "globals.h": "c",
+        "xstring": "cpp"
     }
 }

@@ -43,7 +43,7 @@
 #include <tuple>
 #include <algorithm>
 #include <vector>
-#include <ctime>
+#include <time.h>
 #include "send_data.h"
 #include "globals.h"
 
@@ -61,27 +61,29 @@ using namespace std;
  * PRIVATE TYPEDEFS
  ************************************/
 
-
 /************************************
  * GLOBAL VARIABLES
  ************************************/
 string pcapFile_name_ = "-";
-string netflow_collector_ = "127.0.0.1:2055";
+string netflow_collector_ip_ = "127.0.0.1";
+string netflow_collector_port_ = "2055";
 int active_timer_ = 60;
 int inactive_timer_ = 10;
 int flowcache_size_ = 1024;
 map<tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t>, flow> flow_map_;
-uint32_t time_now_;
+timeval time_now_;
 vector<flow> sending_packets_;
+int flows_send = 0;
 
 /************************************
  * STATIC FUNCTION PROTOTYPES
  ************************************/
 void parse_arguments(int argc, char **argv);
 tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> create_key(flow flow);
+uint32_t getMilliseconds(timeval ts);
 bool compare_by_times(const flow &a, const flow &b);
 void check_timers();
-void send_flows();
+void send_flows(int howMany);
 void update_flow_record(flow *existingRecord, flow *newRecord);
 
 void icmp_v4(flow flow);
@@ -115,9 +117,18 @@ void parse_arguments(int argc, char **argv)
             break;
 
         case 'c':
-            netflow_collector_ = optarg;
+        {
+            string netflow_collector = optarg;
+            size_t found;
+            if ((found = netflow_collector.find("|")) != string::npos)
+            {
+                netflow_collector_ip_ = netflow_collector.substr(0, found);
+                netflow_collector_port_ = netflow_collector.substr(found + 1, string::npos);
+            }
+                
             break;
-
+        }
+            
         case 'a':
             if ((active_timer_ = atoi(optarg)) == 0)
             {
@@ -159,6 +170,11 @@ tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> create_key(flow flow)
 /************************************
  * Helping
  ************************************/
+uint32_t getMilliseconds(timeval ts) 
+{
+    return ts.tv_sec * 1000 + (ts.tv_usec + 500) / 1000;
+}
+
 bool compare_by_times(const flow &a, const flow &b)
 {
     return a.header.SysUpTime > b.header.SysUpTime;
@@ -171,68 +187,61 @@ void check_timers()
         return;
     }
 
-    cout << "Flow map has these items:" << endl;
+    // cout << "Flow map has these items:" << endl;
     for (auto itr = flow_map_.begin(); itr != flow_map_.end(); itr++)
     {
-        char str[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &(itr->second.body.srcIP), str, INET_ADDRSTRLEN);
-        cout << " - " << str << endl;
+        // char str[INET_ADDRSTRLEN];
+        // inet_ntop(AF_INET, &(itr->second.body.srcIP), str, INET_ADDRSTRLEN);
+        // cout << " - " << str << endl;
         // Active
-        uint32_t atimer = time_now_ - itr->second.body.first;
+        uint32_t atimer = getMilliseconds(time_now_) - itr->second.body.first;
 
         // Inactive
-        uint32_t itimer = time_now_ - itr->second.body.last;
-
-        cout << " \t- "
-             << "Atimer = " << atimer << " Active = " << active_timer_ << endl;
-        cout << " \t- "
-             << "Itimer = " << itimer << " Inactive = " << inactive_timer_ << endl;
-        cout << " \t- "
-             << "First = " << itr->second.body.first << " Last = " << itr->second.body.last << endl;
+        uint32_t itimer = getMilliseconds(time_now_) - itr->second.body.last;
 
         if (atimer < active_timer_ && itimer < inactive_timer_)
         {
             continue;
         }
 
-        // Both timings have expired
-        if (atimer > active_timer_ && itimer > inactive_timer_)
-        {
-            // We need to select, which one is older
-            atimer = atimer - active_timer_;
-            itimer = itimer - inactive_timer_;
-            if (atimer > itimer)
-            {
-                itr->second.header.SysUpTime = itr->second.body.first + atimer;
-                cout << " \t- "
-                     << "ATIMER" << endl;
-            }
-            else
-            {
-                itr->second.header.SysUpTime = itr->second.body.last + itimer;
-                cout << " \t- "
-                     << "ITIMER" << endl;
-            }
-        }
-        // Active timer run out
-        else if (atimer > active_timer_)
-        {
-            itr->second.header.SysUpTime = itr->second.body.first + atimer;
-            cout << " \t- "
-                 << "ATIMER" << endl;
-        }
-        // Inactive timer run out
-        else if (itimer > inactive_timer_)
-        {
-            itr->second.header.SysUpTime = itr->second.body.last + itimer;
-            cout << " \t- "
-                 << "ITIMER" << endl;
-        }
+        // // Both timings have expired
+        // if (atimer > active_timer_ && itimer > inactive_timer_)
+        // {
+        //     // We need to select, which one is older
+        //     atimer = atimer - active_timer_;
+        //     itimer = itimer - inactive_timer_;
+        //     if (atimer > itimer)
+        //     {
+        //         itr->second.header.SysUpTime = itr->second.body.first + atimer;
+        //         // cout << " \t- "
+        //         //     << "ATIMER" << endl;
+        //     }
+        //     else
+        //     {
+        //         itr->second.header.SysUpTime = itr->second.body.last + itimer;
+        //         // cout << " \t- "
+        //         //     << "ITIMER" << endl;
+        //     }
+        // }
+        // // Active timer run out
+        // else if (atimer > active_timer_)
+        // {
+        //     itr->second.header.SysUpTime = itr->second.body.first + atimer;
+        //     // cout << " \t- "
+        //     //     << "ATIMER" << endl;
+        // }
+        // // Inactive timer run out
+        // else if (itimer > inactive_timer_)
+        // {
+        //     itr->second.header.SysUpTime = itr->second.body.last + itimer;
+        //     // cout << " \t- "
+        //     //     << "ITIMER" << endl;
+        // }
         sending_packets_.push_back(itr->second);
     }
     if (!sending_packets_.empty())
     {
-        send_flows();
+        send_flows(-1);
     }
 }
 
@@ -241,8 +250,8 @@ void edit_flow(struct flow *flow)
     flow->header.version = ntohs(flow->header.version);
     flow->header.count = ntohs(flow->header.count);
     flow->header.SysUpTime = ntohs(flow->header.SysUpTime);
-    flow->header.unix_nsecs = ntohl(flow->header.unix_nsecs);
-    flow->header.unix_secs = ntohl(flow->header.unix_secs);
+    // flow->header.unix_nsecs = ntohl(flow->header.unix_nsecs);
+    // flow->header.unix_secs = ntohl(flow->header.unix_secs);
 
     flow->body.dOctets = ntohl(flow->body.dOctets);
     flow->body.dPkts = ntohl(flow->body.dPkts);
@@ -250,8 +259,8 @@ void edit_flow(struct flow *flow)
     flow->body.dstIf = ntohs(flow->body.dstIf);
     flow->body.dstIP = ntohl(flow->body.dstIP);
     flow->body.dstPort = ntohs(flow->body.dstPort);
-    flow->body.first = ntohl(flow->body.first);
-    flow->body.last = ntohl(flow->body.last);
+    // flow->body.first = ntohl(flow->body.first);
+    // flow->body.last = ntohl(flow->body.last);
     flow->body.nextHop = ntohl(flow->body.nextHop);
     flow->body.scrIf = ntohs(flow->body.scrIf);
     flow->body.srcAs = ntohs(flow->body.srcAs);
@@ -262,33 +271,39 @@ void edit_flow(struct flow *flow)
 /************************************
  * Flows
  ************************************/
-void send_flows()
+void send_flows(int howMany)
 {
     sort(sending_packets_.begin(), sending_packets_.end(), compare_by_times);
 
+    int cycleCounter = 0;
     while (!sending_packets_.empty())
     {
+        cycleCounter++;
         flow packet = sending_packets_.back();
         tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> key =
             make_tuple(packet.body.srcIP, packet.body.dstIP, packet.body.srcPort, packet.body.dstPort, packet.body.prot);
 
         flow_map_.erase(key);
         sending_packets_.pop_back();
+        packet.header.flow_sequence = flows_send++;
+        packet.header.unix_secs = time_now_.tv_sec;
+        packet.header.unix_nsecs = time_now_.tv_usec * 1000;
         edit_flow(&packet);
+        cout << packet.body.first << endl;
+        cout << packet.header.unix_secs << endl;
         send_data(packet);
 
-        cout << "Sending packet: " << packet.body.srcIP << endl;
-        cout << "In time: " << time_now_ << endl;
+        if (howMany == cycleCounter)
+            return;
     }
-
-    cout << "..." << endl;
 }
 
 void update_flow_record(flow *existingRecord, flow *newRecord)
 {
     existingRecord->body.dOctets += newRecord->body.dOctets;
     existingRecord->body.dPkts++;
-    existingRecord->body.last = time_now_;
+    existingRecord->body.last = getMilliseconds(time_now_);
+    existingRecord->header.SysUpTime = time_now_.tv_usec * 1000 - existingRecord->body.first;
 }
 
 /************************************
@@ -304,12 +319,9 @@ void update_flow_record(flow *existingRecord, flow *newRecord)
  */
 void icmp_v4(flow flow)
 {
-    auto key = create_key(flow);
-    cout << "-------------NEW PACKET-------------" << endl;
-    cout << "- "
-         << "Time now: " << time_now_ << endl;
-
     check_timers();
+
+    auto key = create_key(flow);
 
     auto it = flow_map_.find(key);
     flow.header.count++;
@@ -317,17 +329,17 @@ void icmp_v4(flow flow)
     {
         char str[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &(flow.body.srcIP), str, INET_ADDRSTRLEN);
-        cout << "-> Existint item found! " << str << endl;
         update_flow_record(&it->second, &flow);
     }
     else
     {
-        flow.body.first = time_now_;
-        flow.body.last = time_now_;
+        if ((flow_map_.size() + 1) > flowcache_size_)
+        {
+            send_flows(1);
+        }
+        flow.body.first = getMilliseconds(time_now_);
+        flow.body.last = flow.body.first;
         flow_map_[key] = flow;
-        char str[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &(flow.body.srcIP), str, INET_ADDRSTRLEN);
-        cout << "-> Adding new item: " << str << endl;
     }
 }
 
@@ -349,9 +361,6 @@ void udp_v4(flow flow, const u_char *transportProtocolHdr)
     flow.body.dstPort = ntohs(udpHdr->uh_dport);
 
     auto key = create_key(flow);
-    cout << "-------------NEW PACKET-------------" << endl;
-    cout << "- "
-         << "Time now: " << time_now_ << endl;
 
     check_timers();
 
@@ -360,17 +369,18 @@ void udp_v4(flow flow, const u_char *transportProtocolHdr)
     {
         char str[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &(flow.body.srcIP), str, INET_ADDRSTRLEN);
-        cout << "-> Existint item found! " << str << endl;
         update_flow_record(&it->second, &flow);
     }
     else
     {
-        flow.body.first = time_now_;
-        flow.body.last = time_now_;
+        if ((flow_map_.size() + 1) > flowcache_size_)
+        {
+            send_flows(1);
+        }
+        //flow.body.first = getMilliseconds(time_now_);
+        flow.body.first = time_now_.tv_sec;
+        flow.body.last = flow.body.first;
         flow_map_[key] = flow;
-        char str[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &(flow.body.srcIP), str, INET_ADDRSTRLEN);
-        cout << "-> Adding new item: " << str << endl;
     }
 }
 
@@ -393,9 +403,7 @@ void tcp_v4(flow flow, const u_char *transportProtocolHdr)
     flow.body.flgs = tcpHdr->th_flags;
 
     auto key = create_key(flow);
-    cout << "-------------NEW PACKET-------------" << endl;
-    cout << "- " << "Time now: " << time_now_ << endl;
-    
+
     check_timers();
 
     auto it = flow_map_.find(key);
@@ -403,19 +411,20 @@ void tcp_v4(flow flow, const u_char *transportProtocolHdr)
     {
         char str[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &(flow.body.srcIP), str, INET_ADDRSTRLEN);
-        cout << "-> Existint item found! " << str << endl;
         update_flow_record(&it->second, &flow);
     }
     else
     {
-        flow.body.first = time_now_;
-        flow.body.last = time_now_;
+        if ((flow_map_.size() + 1) > flowcache_size_)
+        {
+            send_flows(1);
+        }
+        flow.body.first = getMilliseconds(time_now_);
+        flow.body.last = flow.body.first;
         flow_map_[key] = flow;
-        char str[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &(flow.body.srcIP), str, INET_ADDRSTRLEN);
-        cout << "-> Adding new item: " << str << endl;
     }
 }
+
 
 /**
  * Hlavni funkce, vola se vzdy pri prijeti paketu.
@@ -438,13 +447,13 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
 
     if (type == 0x0800)
     { // ipv4
-        time_now_ = header->ts.tv_sec;
+        time_now_ = header->ts;
+
         flow.body.prot = ipHeader->ip_p;
         flow.body.tos = ipHeader->ip_tos;
         flow.body.srcIP = ipHeader->ip_src.s_addr;
         flow.body.dstIP = ipHeader->ip_dst.s_addr;
-        // TODO: printf ("The packet seconds are: %s", ctime((const time_t*)&flow.body.first));
-
+        
         switch (ipHeader->ip_p)
         {
         // ICMP
@@ -502,10 +511,9 @@ int main(int argc, char **argv)
     pcap_t *handle;
     char errbuf[PCAP_ERRBUF_SIZE];
 
-    // create_connection(netflow_collector_, 0);
-    create_connection((char*)"127.0.0.1", (char*)"2056");
+    create_connection((char*)netflow_collector_ip_.c_str(), 
+        (char*)netflow_collector_port_.c_str());
 
-    // Otevreni zarizeni pro sledovani paketu
     handle = pcap_open_offline(pcapFile_name_.c_str(), errbuf);
     if (handle == NULL)
     {
@@ -523,7 +531,7 @@ int main(int argc, char **argv)
 
     while (!flow_map_.empty())
     {
-        time_now_++;
+        time_now_.tv_sec++;
         check_timers();
     }
 

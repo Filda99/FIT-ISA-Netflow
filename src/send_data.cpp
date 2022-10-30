@@ -76,7 +76,7 @@ int send_data(struct flow flow)
   // read input data from STDIN (console) until end-of-line (Enter) is pressed
   // when end-of-file (CTRL-D) is received, n == 0
   //{
-    i = send(sock, (const void*)&flow.header.version, sizeof(flow), 0); // send data to the server
+    i = send(sock, (const void*)&flow, sizeof(flow), 0); // send data to the server
     if (i == -1)                         // check if data was sent correctly
       err(1, "send() failed");
     else if (i != sizeof(flow))
@@ -102,7 +102,7 @@ int send_data(struct flow flow)
     //   printf("* UDP packet received from %s, port %d\n", inet_ntoa(from.sin_addr), ntohs(from.sin_port));
     //   printf("%.*s", i, buffer); // print the answer
     // }
-  //}
+  // }
   // reading data until end-of-file (CTRL-D)
 
   // if (msg_size == -1)
