@@ -192,18 +192,21 @@ void check_timers()
 
     for (auto itr = flow_map_.begin(); itr != flow_map_.end(); itr++)
     {
+        timeval temp{};
+        timersub(&time_now_, &time_first_pkt, &temp);
+
         // Active
-        uint32_t atimer = getMilliseconds(time_now_) - itr->second.body.first;
+        uint32_t atimer = getMilliseconds(temp) - itr->second.body.first;
 
         // Inactive
-        uint32_t itimer = getMilliseconds(time_now_) - itr->second.body.last;
+        uint32_t itimer = getMilliseconds(temp) - itr->second.body.last;
 
-        if (atimer < (active_timer_ * 1000) && itimer < (inactive_timer_ * 1000))
+        if (atimer > (active_timer_ * 1000) || itimer > (inactive_timer_ * 1000))
         {
-            continue;
+            sending_packets_.push_back(itr->second);
         }
-        sending_packets_.push_back(itr->second);
     }
+
     if (!sending_packets_.empty())
     {
         send_flows(-1);
@@ -223,8 +226,7 @@ void send_flows(int howMany)
     {
         cycleCounter++;
         flow packet = sending_packets_.back();
-        tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> key =
-            make_tuple(packet.body.srcIP, packet.body.dstIP, packet.body.srcPort, packet.body.dstPort, packet.body.prot);
+        auto key = create_key(packet);
 
         flow_map_.erase(key);
         sending_packets_.pop_back();
@@ -258,13 +260,13 @@ void create_flow(flow *flow)
 
 void update_flow_record(flow *existingRecord, flow *newRecord)
 {
-    existingRecord->body.dOctets += newRecord->body.dOctets;
-    existingRecord->body.dPkts++;
-
     timeval sysUpTime;
     timersub(&time_now_, &time_first_pkt, &sysUpTime);
     existingRecord->header.SysUpTime = getMilliseconds(sysUpTime);
     existingRecord->body.last = existingRecord->header.SysUpTime;
+
+    existingRecord->body.dOctets += newRecord->body.dOctets;
+    existingRecord->body.dPkts++;
 }
 
 
@@ -305,9 +307,8 @@ void icmp_v4(flow flow)
     check_timers();
 
     auto key = create_key(flow);
-
     auto it = flow_map_.find(key);
-    flow.header.count++;
+
     if (it != flow_map_.end())
     {
         update_flow_record(&it->second, &flow);
@@ -336,15 +337,15 @@ void icmp_v4(flow flow)
  */
 void udp_v4(flow flow, const u_char *transportProtocolHdr)
 {
+    check_timers();
+
     struct udphdr *udpHdr = (struct udphdr *)transportProtocolHdr; // udp struktura
     flow.body.srcPort = ntohs(udpHdr->uh_sport);
     flow.body.dstPort = ntohs(udpHdr->uh_dport);
 
     auto key = create_key(flow);
-
-    check_timers();
-
     auto it = flow_map_.find(key);
+
     if (it != flow_map_.end())
     {
         update_flow_record(&it->second, &flow);
@@ -373,16 +374,16 @@ void udp_v4(flow flow, const u_char *transportProtocolHdr)
  */
 void tcp_v4(flow flow, const u_char *transportProtocolHdr)
 {
+    check_timers();
+
     struct tcphdr *tcpHdr = (struct tcphdr *)transportProtocolHdr; // udp struktura
     flow.body.srcPort = ntohs(tcpHdr->th_sport);
     flow.body.dstPort = ntohs(tcpHdr->th_dport);
     flow.body.flgs = tcpHdr->th_flags;
 
     auto key = create_key(flow);
-
-    check_timers();
-
     auto it = flow_map_.find(key);
+ 
     if (it != flow_map_.end())
     {
         update_flow_record(&it->second, &flow);
@@ -431,7 +432,8 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
         flow.body.tos = ipHeader->ip_tos;
         flow.body.srcIP = ipHeader->ip_src.s_addr;
         flow.body.dstIP = ipHeader->ip_dst.s_addr;
-        
+        flow.body.dOctets = htons(ipHeader->ip_len);
+
         switch (ipHeader->ip_p)
         {
         // ICMP
@@ -442,9 +444,9 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
         // TCP + UDP
         case 6:
         case 17:
-        { // V zavorkach kvuli deklarovani promenne
-            flow.body.dOctets = ipHeader->ip_hl * 4;
-            const u_char *transportProtocolHdr = packet + ETH_HDR + flow.body.dOctets;
+        {
+            unsigned int ipLen = ipHeader->ip_hl * 4;
+            const u_char *transportProtocolHdr = packet + ETH_HDR + ipLen;
 
             if (ipHeader->ip_p == 17)
                 udp_v4(flow, transportProtocolHdr);
