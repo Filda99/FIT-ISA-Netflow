@@ -192,7 +192,6 @@ void check_timers()
     for (auto itr = flow_map_.begin(); itr != flow_map_.end(); itr++)
     {
         timeval flow_SysUpTime{};
-        // struct timeval flow_time {(long int)&itr->second.header.unix_secs, (long int)&itr->second.header.unix_nsecs};
         timersub(&time_now_, &time_first_pkt, &flow_SysUpTime);
 
         uint32_t active_time = getMillis(flow_SysUpTime) - itr->second.body.first;
@@ -264,12 +263,6 @@ void send_flows(int howMany)
         sending_packets_.pop_back();
         
         packet.header.flow_sequence = flows_send++;
-        // packet.header.unix_secs = time_now_.tv_sec;
-        // packet.header.unix_nsecs = time_now_.tv_usec * 1000;
-
-        // timeval sysUpTime;
-        // timersub(&time_now_, &time_first_pkt, &sysUpTime);
-        // packet.header.SysUpTime = getMillis(sysUpTime);
         
         edit_flow(&packet);
         send_data(packet);
@@ -287,9 +280,6 @@ void create_flow(flow *flow)
     flow->header.SysUpTime = getMillis(sysUpTime);
     flow->body.first = flow->header.SysUpTime;
     flow->body.last = flow->header.SysUpTime;
-
-    flow->header.unix_secs = time_now_.tv_sec;
-    flow->header.unix_nsecs = time_now_.tv_usec * 1000;
 }
 
 
@@ -299,9 +289,6 @@ void update_flow_record(flow *existingRecord, flow *newRecord)
     timersub(&time_now_, &time_first_pkt, &sysUpTime);
     existingRecord->header.SysUpTime = getMillis(sysUpTime);
     existingRecord->body.last = existingRecord->header.SysUpTime;
-
-    existingRecord->header.unix_secs = time_now_.tv_sec;
-    existingRecord->header.unix_nsecs = time_now_.tv_usec * 1000;
 
     existingRecord->body.dOctets += newRecord->body.dOctets;
     existingRecord->body.dPkts++;
