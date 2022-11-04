@@ -39,6 +39,7 @@
 #include <netinet/tcp.h>      //tcp hlavicka
 #include <netinet/if_ether.h> //ethernet hlavicka
 #include <netinet/ip.h>       //ip hlavicka
+#include <math.h>
 #include <map>
 #include <tuple>
 #include <algorithm>
@@ -74,15 +75,13 @@ map<tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t>, flow> flow_map_;
 timeval time_now_{};
 timeval time_first_pkt{};
 vector<flow> sending_packets_;
-int flows_send = 0;
-int flows_count = 0;
 
 /************************************
  * STATIC FUNCTION PROTOTYPES
  ************************************/
 void parse_arguments(int argc, char **argv);
 tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> create_key(flow flow);
-uint32_t getMilliseconds(timeval ts);
+uint32_t getMillis(timeval ts);
 bool compare_by_times(const flow &a, const flow &b);
 void check_timers();
 void send_flows(int howMany);
@@ -123,7 +122,7 @@ void parse_arguments(int argc, char **argv)
         {
             string netflow_collector = optarg;
             size_t found;
-            if ((found = netflow_collector.find("|")) != string::npos)
+            if ((found = netflow_collector.find(":")) != string::npos)
             {
                 netflow_collector_ip_ = netflow_collector.substr(0, found);
                 netflow_collector_port_ = netflow_collector.substr(found + 1, string::npos);
@@ -173,9 +172,9 @@ tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t> create_key(flow flow)
 /************************************
  * Helping
  ************************************/
-uint32_t getMilliseconds(timeval ts) 
+uint32_t getMillis(timeval ts) 
 {
-    return ts.tv_sec * 1000 + (ts.tv_usec + 500) / 1000;
+    return ts.tv_sec * 1000 + round(ts.tv_usec) / 1000;
 }
 
 bool compare_by_times(const flow &a, const flow &b)
@@ -192,16 +191,13 @@ void check_timers()
 
     for (auto itr = flow_map_.begin(); itr != flow_map_.end(); itr++)
     {
-        timeval temp{};
-        timersub(&time_now_, &time_first_pkt, &temp);
+        timeval packet_time{};
+        timersub(&time_now_, &time_first_pkt, &packet_time);
 
-        // Active
-        uint32_t atimer = getMilliseconds(temp) - itr->second.body.first;
+        uint32_t active_time = getMillis(packet_time) - itr->second.body.first;
+        uint32_t inactive_time = getMillis(packet_time) - itr->second.body.last;
 
-        // Inactive
-        uint32_t itimer = getMilliseconds(temp) - itr->second.body.last;
-
-        if (atimer > (active_timer_ * 1000) || itimer > (inactive_timer_ * 1000))
+        if (active_time > (active_timer_ * 1000) || inactive_time > (inactive_timer_ * 1000))
         {
             sending_packets_.push_back(itr->second);
         }
@@ -219,6 +215,7 @@ void check_timers()
  ************************************/
 void send_flows(int howMany)
 {
+    static int flows_send = 0;
     sort(sending_packets_.begin(), sending_packets_.end(), compare_by_times);
 
     int cycleCounter = 0;
@@ -237,9 +234,12 @@ void send_flows(int howMany)
 
         timeval sysUpTime;
         timersub(&time_now_, &time_first_pkt, &sysUpTime);
-        packet.header.SysUpTime = getMilliseconds(sysUpTime);
+        packet.header.SysUpTime = getMillis(sysUpTime);
         
         edit_flow(&packet);
+        cout << "... new" << endl;
+        cout << packet.body.first << " " << packet.body.last << endl;
+        cout << packet.header.SysUpTime << endl;
         send_data(packet);
 
         if (howMany == cycleCounter)
@@ -252,7 +252,7 @@ void create_flow(flow *flow)
 {
     timeval sysUpTime;
     timersub(&time_now_, &time_first_pkt, &sysUpTime);
-    flow->header.SysUpTime = getMilliseconds(sysUpTime);
+    flow->header.SysUpTime = getMillis(sysUpTime);
     flow->body.first = flow->header.SysUpTime;
     flow->body.last = flow->header.SysUpTime;
 }
@@ -262,7 +262,7 @@ void update_flow_record(flow *existingRecord, flow *newRecord)
 {
     timeval sysUpTime;
     timersub(&time_now_, &time_first_pkt, &sysUpTime);
-    existingRecord->header.SysUpTime = getMilliseconds(sysUpTime);
+    existingRecord->header.SysUpTime = getMillis(sysUpTime);
     existingRecord->body.last = existingRecord->header.SysUpTime;
 
     existingRecord->body.dOctets += newRecord->body.dOctets;
@@ -304,8 +304,6 @@ void edit_flow(struct flow *flow)
  */
 void icmp_v4(flow flow)
 {
-    check_timers();
-
     auto key = create_key(flow);
     auto it = flow_map_.find(key);
 
@@ -337,8 +335,6 @@ void icmp_v4(flow flow)
  */
 void udp_v4(flow flow, const u_char *transportProtocolHdr)
 {
-    check_timers();
-
     struct udphdr *udpHdr = (struct udphdr *)transportProtocolHdr; // udp struktura
     flow.body.srcPort = ntohs(udpHdr->uh_sport);
     flow.body.dstPort = ntohs(udpHdr->uh_dport);
@@ -374,8 +370,6 @@ void udp_v4(flow flow, const u_char *transportProtocolHdr)
  */
 void tcp_v4(flow flow, const u_char *transportProtocolHdr)
 {
-    check_timers();
-
     struct tcphdr *tcpHdr = (struct tcphdr *)transportProtocolHdr; // udp struktura
     flow.body.srcPort = ntohs(tcpHdr->th_sport);
     flow.body.dstPort = ntohs(tcpHdr->th_dport);
@@ -418,14 +412,15 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
     // Posunuti se v paketu o ethernetovou hlavicku
     const u_char *packetIP = packet + ETH_HDR;
     struct ip *ipHeader = (struct ip *)packetIP;
+    static int flows_count = 0;
 
     if (type == 0x0800)
     { // ipv4
+        time_now_ = header->ts;
         if (flows_count == 0)
         {
-            time_first_pkt = header->ts;
+            time_first_pkt = time_now_;
         }
-        time_now_ = header->ts;
         flows_count++;
 
         flow.body.prot = ipHeader->ip_p;
@@ -433,6 +428,9 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
         flow.body.srcIP = ipHeader->ip_src.s_addr;
         flow.body.dstIP = ipHeader->ip_dst.s_addr;
         flow.body.dOctets = htons(ipHeader->ip_len);
+
+        // Check timers, if some packets in map should be send to collector. 
+        check_timers();
 
         switch (ipHeader->ip_p)
         {
