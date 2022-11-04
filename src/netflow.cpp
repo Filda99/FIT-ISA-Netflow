@@ -179,7 +179,7 @@ uint32_t getMillis(timeval ts)
 
 bool compare_by_times(const flow &a, const flow &b)
 {
-    return a.body.last > b.body.last;
+    return a.body.last < b.body.last;
 }
 
 void check_timers()
@@ -191,16 +191,51 @@ void check_timers()
 
     for (auto itr = flow_map_.begin(); itr != flow_map_.end(); itr++)
     {
-        timeval packet_time{};
-        timersub(&time_now_, &time_first_pkt, &packet_time);
+        timeval flow_SysUpTime{};
+        // struct timeval flow_time {(long int)&itr->second.header.unix_secs, (long int)&itr->second.header.unix_nsecs};
+        timersub(&time_now_, &time_first_pkt, &flow_SysUpTime);
 
-        uint32_t active_time = getMillis(packet_time) - itr->second.body.first;
-        uint32_t inactive_time = getMillis(packet_time) - itr->second.body.last;
+        uint32_t active_time = getMillis(flow_SysUpTime) - itr->second.body.first;
+        uint32_t inactive_time = getMillis(flow_SysUpTime) - itr->second.body.last;
 
-        if (active_time > (active_timer_ * 1000) || inactive_time > (inactive_timer_ * 1000))
+        if (active_time < (active_timer_ * 1000) && inactive_time < (inactive_timer_ * 1000))
         {
-            sending_packets_.push_back(itr->second);
+            continue;
         }
+
+        // Both timer run out
+        if (active_time > (active_timer_ * 1000) && inactive_time > (inactive_timer_ * 1000))
+        {
+            // We need to select, which one is older
+            active_time = active_time - active_timer_;
+            inactive_time = inactive_time - inactive_timer_;
+            if (active_time > inactive_time)
+            {
+                itr->second.header.SysUpTime = itr->second.body.first + active_timer_*1000;
+                itr->second.header.unix_secs = itr->second.header.unix_secs + active_timer_;
+            }
+            else
+            {
+                itr->second.header.SysUpTime = itr->second.body.last + inactive_timer_*1000;
+                itr->second.header.unix_secs = itr->second.header.unix_secs + inactive_timer_;
+            }
+        }
+        // Active timer run out
+        else if (active_time > (active_timer_ * 1000))
+        {
+            itr->second.header.SysUpTime = itr->second.body.first + active_timer_*1000;
+            itr->second.header.unix_secs = itr->second.header.unix_secs + active_timer_;
+        }
+        // Inactive timer run out
+        else if (inactive_time > (inactive_timer_ * 1000))
+        {
+            itr->second.header.SysUpTime = itr->second.body.last + inactive_timer_*1000;
+            itr->second.header.unix_secs = itr->second.header.unix_secs + inactive_timer_;
+        }
+
+        itr->second.header.unix_nsecs = flow_SysUpTime.tv_usec * 1000;
+
+        sending_packets_.push_back(itr->second);
     }
 
     if (!sending_packets_.empty())
@@ -229,17 +264,14 @@ void send_flows(int howMany)
         sending_packets_.pop_back();
         
         packet.header.flow_sequence = flows_send++;
-        packet.header.unix_secs = time_now_.tv_sec;
-        packet.header.unix_nsecs = time_now_.tv_usec * 1000;
+        // packet.header.unix_secs = time_now_.tv_sec;
+        // packet.header.unix_nsecs = time_now_.tv_usec * 1000;
 
-        timeval sysUpTime;
-        timersub(&time_now_, &time_first_pkt, &sysUpTime);
-        packet.header.SysUpTime = getMillis(sysUpTime);
+        // timeval sysUpTime;
+        // timersub(&time_now_, &time_first_pkt, &sysUpTime);
+        // packet.header.SysUpTime = getMillis(sysUpTime);
         
         edit_flow(&packet);
-        cout << "... new" << endl;
-        cout << packet.body.first << " " << packet.body.last << endl;
-        cout << packet.header.SysUpTime << endl;
         send_data(packet);
 
         if (howMany == cycleCounter)
@@ -255,6 +287,9 @@ void create_flow(flow *flow)
     flow->header.SysUpTime = getMillis(sysUpTime);
     flow->body.first = flow->header.SysUpTime;
     flow->body.last = flow->header.SysUpTime;
+
+    flow->header.unix_secs = time_now_.tv_sec;
+    flow->header.unix_nsecs = time_now_.tv_usec * 1000;
 }
 
 
@@ -264,6 +299,9 @@ void update_flow_record(flow *existingRecord, flow *newRecord)
     timersub(&time_now_, &time_first_pkt, &sysUpTime);
     existingRecord->header.SysUpTime = getMillis(sysUpTime);
     existingRecord->body.last = existingRecord->header.SysUpTime;
+
+    existingRecord->header.unix_secs = time_now_.tv_sec;
+    existingRecord->header.unix_nsecs = time_now_.tv_usec * 1000;
 
     existingRecord->body.dOctets += newRecord->body.dOctets;
     existingRecord->body.dPkts++;
