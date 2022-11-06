@@ -231,6 +231,12 @@ void check_timers()
             itr->second.header.SysUpTime = itr->second.body.last + inactive_timer_*1000;
             itr->second.header.unix_secs = itr->second.header.unix_secs + inactive_timer_;
         }
+        // TCP flags
+        else if (itr->second.body.flgs && 0x01)
+        {
+            itr->second.header.SysUpTime = itr->second.body.last + getMillis(flow_SysUpTime);
+            itr->second.header.unix_secs = itr->second.header.unix_secs + flow_SysUpTime.tv_sec;
+        }
 
         itr->second.header.unix_nsecs = flow_SysUpTime.tv_usec * 1000;
 
@@ -298,6 +304,7 @@ void update_flow_record(flow *existingRecord, flow *newRecord)
 
     existingRecord->body.dOctets += newRecord->body.dOctets;
     existingRecord->body.dPkts++;
+    existingRecord->body.flgs |= newRecord->body.flgs;
 }
 
 
@@ -412,7 +419,7 @@ void udp_v4(flow flow, const u_char *transportProtocolHdr)
  */
 void tcp_v4(flow flow, const u_char *transportProtocolHdr)
 {
-    struct tcphdr *tcpHdr = (struct tcphdr *)transportProtocolHdr; // udp struktura
+    struct tcphdr *tcpHdr = (struct tcphdr *)transportProtocolHdr; // tcp struktura
  
     /* UDP header as specified by RFC 768, August 1980. */
     #ifdef __FAVOR_BSD
