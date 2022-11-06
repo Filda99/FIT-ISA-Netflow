@@ -179,7 +179,7 @@ uint32_t getMillis(timeval ts)
 
 bool compare_by_times(const flow &a, const flow &b)
 {
-    return a.body.last < b.body.last;
+    return a.header.SysUpTime < b.header.SysUpTime;
 }
 
 void check_timers()
@@ -280,6 +280,9 @@ void create_flow(flow *flow)
     flow->header.SysUpTime = getMillis(sysUpTime);
     flow->body.first = flow->header.SysUpTime;
     flow->body.last = flow->header.SysUpTime;
+
+    flow->header.unix_secs = time_now_.tv_sec;
+    flow->header.unix_nsecs = time_now_.tv_usec * 1000;
 }
 
 
@@ -289,6 +292,9 @@ void update_flow_record(flow *existingRecord, flow *newRecord)
     timersub(&time_now_, &time_first_pkt, &sysUpTime);
     existingRecord->header.SysUpTime = getMillis(sysUpTime);
     existingRecord->body.last = existingRecord->header.SysUpTime;
+
+    existingRecord->header.unix_secs = time_now_.tv_sec;
+    existingRecord->header.unix_nsecs = time_now_.tv_usec * 1000;
 
     existingRecord->body.dOctets += newRecord->body.dOctets;
     existingRecord->body.dPkts++;
@@ -361,8 +367,19 @@ void icmp_v4(flow flow)
 void udp_v4(flow flow, const u_char *transportProtocolHdr)
 {
     struct udphdr *udpHdr = (struct udphdr *)transportProtocolHdr; // udp struktura
+
+    /* UDP header as specified by RFC 768, August 1980. */
+    #ifdef __FAVOR_BSD
+
     flow.body.srcPort = ntohs(udpHdr->uh_sport);
     flow.body.dstPort = ntohs(udpHdr->uh_dport);
+
+    #else 
+
+    flow.body.srcPort = ntohs(udpHdr->source);
+    flow.body.dstPort = ntohs(udpHdr->dest);
+
+    #endif
 
     auto key = create_key(flow);
     auto it = flow_map_.find(key);
@@ -396,9 +413,22 @@ void udp_v4(flow flow, const u_char *transportProtocolHdr)
 void tcp_v4(flow flow, const u_char *transportProtocolHdr)
 {
     struct tcphdr *tcpHdr = (struct tcphdr *)transportProtocolHdr; // udp struktura
+ 
+    /* UDP header as specified by RFC 768, August 1980. */
+    #ifdef __FAVOR_BSD
+
     flow.body.srcPort = ntohs(tcpHdr->th_sport);
     flow.body.dstPort = ntohs(tcpHdr->th_dport);
     flow.body.flgs = tcpHdr->th_flags;
+
+    #else
+
+    flow.body.srcPort = ntohs(tcpHdr->source);
+    flow.body.dstPort = ntohs(tcpHdr->dest);
+    flow.body.flgs =    tcpHdr->fin | tcpHdr->syn | tcpHdr->rst |
+                        tcpHdr->psh | tcpHdr->ack | tcpHdr->urg;
+
+    #endif
 
     auto key = create_key(flow);
     auto it = flow_map_.find(key);
