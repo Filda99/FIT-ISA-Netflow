@@ -25,6 +25,8 @@
 /************************************
  * INCLUDES
  ************************************/
+#define __FAVOR_BSD
+
 #include <stdio.h>
 #include <pcap.h>
 #include <getopt.h>
@@ -529,7 +531,7 @@ int pcap_set_filter(pcap_t *handle)
 
     if (pcap_compile(handle, &fp, filterStr.c_str(), 0, net) == -1)
     {
-        fprintf(stderr, "[ERR]: Parsování filtru se neydařilo %s: %s\n", filterStr.c_str(), pcap_geterr(handle));
+        fprintf(stderr, "[ERR]: Parsování filtru se nepodařilo %s: %s\n", filterStr.c_str(), pcap_geterr(handle));
         return (2);
     }
     if (pcap_setfilter(handle, &fp) == -1)
@@ -557,7 +559,7 @@ int main(int argc, char **argv)
     handle = pcap_open_offline(pcapFile_name_.c_str(), errbuf);
     if (handle == NULL)
     {
-        fprintf(stderr, "[ERR]: Nepodařilo se mi otevřít soubor %s, %s\n", pcapFile_name_.c_str(), errbuf);
+        fprintf(stderr, "[ERR]: Nepodařilo se otevřít soubor %s, %s\n", pcapFile_name_.c_str(), errbuf);
         return (2);
     }
 

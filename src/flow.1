@@ -1,0 +1,44 @@
+.TH FLOW 1
+.SH NAME
+netflow \- Generování NetFlow dat ze zachycené síťové komunikace
+.SH SYNOPSIS
+.B ./flow
+[OPTIONS]
+.SH DESCRIPTION
+NetFlow exportér je program, který ze zachycených síťových dat ve formátu pcap vytvoří záznamy NetFlow, které odešle na kolektor
+.SH OPTIONS
+.TP
+.BR \-f " " \<file\> 
+jméno analyzovaného souboru nebo STDIN,
+
+.TP
+.BR \-c " " \<neflow_collector:port\> 
+IP adresa, nebo hostname NetFlow kolektoru. volitelně i UDP port (127.0.0.1:2055, pokud není specifikováno),
+
+.TP
+.BR \-a " " \<active_timer\> 
+interval v sekundách, po kterém se exportují aktivní záznamy na kolektor (60, pokud není specifikováno),
+
+
+.TP
+.BR \-i " " \<inactive_timer\> 
+interval v sekundách, po jehož vypršení se exportují neaktivní záznamy na kolektor (60, pokud není specifikováno),
+
+.TP
+.BR \-m " " \<count\> 
+velikost flow-cache. Při dosažení max. velikosti dojde k exportu nejstaršího záznamu v cachi na kolektor (1024, pokud není specifikováno).
+
+.SH RETURN VALUE
+.TP
+.BR Returns
+
+.BR 0 \t No " " error.
+
+.BR 1 \t Could " " not " " connect " " to " " collector.
+
+.BR 2 \t Could " " not " " read " " pcap " " file
+
+
+.SH EXAMPLES
+.BR ./flow " " -f " " input.pcap " " -c " " 192.168.0.1:2055 
+Vytvoří netflow záznamy z input.pcap souboru a odešle je na kolektor, který má IP adresu 192.168.0.1 s portem 2055
